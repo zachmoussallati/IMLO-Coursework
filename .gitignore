@@ -1,0 +1,35 @@
+# Auto-downloaded dataset
+data/
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Trained weights — I add the final model.pth to the submission via `git add -f model.pth`
+*.pth
+
+# Local tooling / agent workspace (not part of the project)
+.claude/
+
+# Logs / scratch
+*.log
+runs/

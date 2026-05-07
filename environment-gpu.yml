@@ -1,0 +1,19 @@
+name: imlo-coursework-gpu
+channels:
+    - defaults
+dependencies:
+    - python=3.11
+    - pip
+    - pip:
+        - --extra-index-url https://download.pytorch.org/whl/cu126
+        - matplotlib
+        - numpy
+        - pillow
+        - pandas
+        - scikit-learn
+        - scipy
+        - seaborn
+        - torch
+        - torchinfo
+        - torchvision
+        - tqdm
