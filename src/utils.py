@@ -8,6 +8,7 @@ around torchinfo.summary so MODEL_SUMMARY.txt always reflects the current model.
 
 from __future__ import annotations
 
+import functools
 import os
 import random
 from pathlib import Path
@@ -41,21 +42,24 @@ def seed_all(seed: int = 42) -> torch.Generator:
     return g
 
 
+def _seeded_worker_init(worker_id: int, seed: int) -> None:
+    """Module-level worker init so it pickles cleanly on Windows spawn."""
+    worker_seed = seed + worker_id
+    random.seed(worker_seed)
+    np.random.seed(worker_seed)
+    torch.manual_seed(worker_seed)
+
+
 def make_worker_init(seed: int = 42) -> Callable[[int], None]:
     """Build a DataLoader worker_init_fn that seeds python/numpy/torch per worker.
 
-    PyTorch's default worker init only seeds torch — anything that reaches into
-    numpy.random or python's random (some versions of torchvision transforms do)
-    would otherwise still be non-deterministic across workers.
+    why: PyTorch's default worker init only seeds torch - anything that reaches
+    into numpy.random or python's random (some torchvision transforms do)
+    would otherwise still be non-deterministic across workers. I use
+    functools.partial of a module-level function (rather than a closure) so
+    the function is picklable for Windows' spawn-based DataLoader workers.
     """
-
-    def _init(worker_id: int) -> None:
-        worker_seed = seed + worker_id
-        random.seed(worker_seed)
-        np.random.seed(worker_seed)
-        torch.manual_seed(worker_seed)
-
-    return _init
+    return functools.partial(_seeded_worker_init, seed=seed)
 
 
 class AverageMeter:
