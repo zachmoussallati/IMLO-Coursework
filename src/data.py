@@ -138,16 +138,13 @@ def build_train_transform(mean: list[float], std: list[float]) -> T.Compose:
             # why: RandAugment (Cubuk et al., 2020), magnitude 7 / 2 ops.
             # Magnitude 9 was too aggressive at this data scale; 7 keeps the
             # geometric / photometric mix without crippling early learning.
+            # I tried adding RandomErasing(p=0.25) on top of this and the
+            # result regressed (Q15 45.60% -> 31.29% on a full 30-epoch run);
+            # at this short training horizon the extra noise compounds with
+            # OneCycle's already-tight schedule, so I leave it off.
             T.RandAugment(num_ops=2, magnitude=7),
             T.ToTensor(),
             T.Normalize(mean, std),
-            # why: RandomErasing (Zhong et al., 2017) on the normalized
-            # tensor. Of the regularisers I stripped during the bring-up,
-            # this is the one most worth re-adding: it closes the
-            # train-test gap (the previous run had 60.84 / 45.60 = 15pp
-            # gap, plenty of room) and the model can comfortably train
-            # through it because it only fires on a quarter of batches.
-            T.RandomErasing(p=0.25),
         ]
     )
 

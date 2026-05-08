@@ -43,7 +43,7 @@ def main() -> None:
     )
 
     # Match train.py's MAX_LR so this verify reflects the live recipe.
-    max_lr = 5e-2
+    max_lr = 1e-1
     opt = optim.SGD(model.parameters(), lr=max_lr, momentum=0.9,
                     nesterov=True, weight_decay=5e-4)
     steps = len(loaders["train"]) * QUICK_EPOCHS

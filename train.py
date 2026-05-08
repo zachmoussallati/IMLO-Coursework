@@ -37,12 +37,12 @@ EPOCHS = 30
 TARGET_BATCH_SIZE = 128
 FALLBACK_BATCH_SIZE = 64
 NUM_WORKERS = 4
-# why: dropped from 1e-1 to 5e-2. With the unstuck recipe the model fits
-# (60.84% trainval at lr=0.1) but loss in early epochs hovered close to the
-# random-init noise floor before the cosine kicked in - the LR was too hot
-# to settle into a clean basin during warmup. Half the peak gives a
-# cleaner convergence trajectory at the same OneCycle shape.
-MAX_LR = 5e-2
+# why: 1e-1 peak. I tried 5e-2 thinking the lower LR would settle into a
+# cleaner basin during warmup, but a full 30-epoch run regressed Q15 from
+# 45.60% to 31.29%. With only 30 epochs / ~750 optimiser steps, halving
+# the peak halves the effective "hot" learning window, which costs more
+# than the cleaner convergence buys. 1e-1 is back as the OneCycle peak.
+MAX_LR = 1e-1
 WEIGHT_DECAY = 5e-4
 MOMENTUM = 0.9
 # why: pct_start = 5/30 = 0.1667 - five epochs of warmup, twenty-five of
