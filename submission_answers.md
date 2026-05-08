@@ -124,7 +124,7 @@ indirectly leaked into model selection.
 
 ## Q14 — Accuracy on the official trainval set
 
-**Answer:** `__Q14_TRAINVAL_ACC__ %`
+**Answer:** `60.84 %`
 
 Evaluated under the eval transform (Resize 256 → CenterCrop 224 → Normalize),
 no augmentation, no TTA, on all 3 680 trainval images. Reported by the
@@ -132,7 +132,7 @@ final block of `train.py`.
 
 ## Q15 — Accuracy on the official test set
 
-**Answer:** `__Q15_TEST_ACC__ %`
+**Answer:** `45.60 %`
 
 Evaluated on all 3 669 test images with horizontal-flip TTA: averaging the
 softmax probabilities from the original image and its horizontal flip.
