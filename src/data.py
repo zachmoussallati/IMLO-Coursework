@@ -204,11 +204,15 @@ def build_loaders(
     val_subset = Subset(eval_trainval, stats["val_indices"])
     clean_train_subset = Subset(eval_trainval, stats["train_indices"])
 
-    common = dict(
-        num_workers=num_workers,
-        pin_memory=True,
-        persistent_workers=num_workers > 0,
-    )
+    # why: I keep five DataLoaders alive simultaneously (train / val /
+    # clean_train every epoch; full_trainval / test once at the end). On
+    # Windows, each persistent worker holds prefetched batches in shared
+    # memory and Windows' commit limit blows up quickly when too many
+    # workers stay alive. I cap each loader at num_workers (capped to 2 here)
+    # and only let the train loader keep workers persistent across epochs;
+    # the eval loaders re-spawn workers per iteration, which costs ~1s per
+    # epoch but stops the shared-memory commit from drifting upward.
+    eval_workers = min(num_workers, 2)
 
     train_loader = DataLoader(
         train_subset,
@@ -217,35 +221,42 @@ def build_loaders(
         drop_last=True,
         generator=generator,
         worker_init_fn=worker_init_fn,
-        **common,
+        num_workers=num_workers,
+        pin_memory=True,
+        persistent_workers=num_workers > 0,
+    )
+    eval_kwargs = dict(
+        num_workers=eval_workers,
+        pin_memory=True,
+        persistent_workers=False,
     )
     val_loader = DataLoader(
         val_subset,
         batch_size=batch_size,
         shuffle=False,
         worker_init_fn=worker_init_fn,
-        **common,
+        **eval_kwargs,
     )
     clean_train_loader = DataLoader(
         clean_train_subset,
         batch_size=batch_size,
         shuffle=False,
         worker_init_fn=worker_init_fn,
-        **common,
+        **eval_kwargs,
     )
     full_trainval_loader = DataLoader(
         eval_trainval,
         batch_size=batch_size,
         shuffle=False,
         worker_init_fn=worker_init_fn,
-        **common,
+        **eval_kwargs,
     )
     test_loader = DataLoader(
         test_ds,
         batch_size=batch_size,
         shuffle=False,
         worker_init_fn=worker_init_fn,
-        **common,
+        **eval_kwargs,
     )
 
     return {
