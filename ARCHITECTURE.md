@@ -141,9 +141,10 @@ blocks end with a conv (not an activation), so without this the head would
 be averaging un-normalised feature maps, which empirically hurts.
 
 The head is `AdaptiveAvgPool(1) → Dropout(p=0.2) → Linear(512, 37)`. I keep
-dropout light because it stacks with weight decay, label smoothing, mixup,
-CutMix, and RandomErasing — the regularisation budget is already well
-spent and heavier dropout slows convergence in only 30 epochs.
+dropout light because it stacks with weight decay and label smoothing —
+the regularisation budget is already well spent without piling extra
+stochastic noise on the pooled features, and heavier dropout slows
+convergence in only 30 epochs.
 
 ### 2.8 Initialisation
 
@@ -153,10 +154,15 @@ spent and heavier dropout slows convergence in only 30 epochs.
 - BN weights initialised to 1, biases to 0.
 - Linear weights: small `normal(std=0.01)`. Default Kaiming-uniform was
   giving a noisier softmax at epoch 1.
-- **Zero-init the final BN of every residual block** (Goyal et al. 2017,
-  arXiv:1706.02677). With γ = 0 in `bn_b`, the residual branch outputs
-  zero at initialisation and the network is exactly identity, which
-  stabilises the early high-LR phase of OneCycle.
+- I tried the **zero-init-final-BN** trick (Goyal et al. 2017,
+  arXiv:1706.02677) — γ = 0 in `bn_b` so each residual branch starts at
+  zero and the whole network is exactly identity at init. On
+  ImageNet-scale training that stabilises the early high-LR phase, but at
+  this data scale (3 312 training images, 30 epochs, ~750 optimiser steps
+  total) the residual branches never woke up: clean-train accuracy stalled
+  in the low double digits. I reverted to letting `bn_b.weight` start at
+  the default 1.0 so signal flows through the residual branches from
+  step 1.
 
 ## 3. Data pipeline (`src/data.py`)
 
@@ -197,42 +203,54 @@ Train transforms (in order):
    class-relevant content while still adding useful translation/scale
    variance.
 2. `RandomHorizontalFlip()` — a cat is still that cat after a mirror.
-3. `RandAugment(num_ops=2, magnitude=9)` — Cubuk et al. 2020. A strong but
-   well-tested mix of geometric and photometric ops without per-dataset
-   tuning.
-4. `ColorJitter(0.3, 0.3, 0.3)` — modest extra colour variance on top of
-   RandAugment. There is some overlap with RandAugment's colour ops; I
-   keep both because the combination empirically helps slightly more
-   than either alone.
-5. `ToTensor()`, then `Normalize(mean, std)` from `data_stats.json`.
-6. `RandomErasing(p=0.25)` — Zhong et al. 2017. Low probability so it
-   doesn't over-stack with CutMix.
+3. `RandAugment(num_ops=2, magnitude=7)` — Cubuk et al. 2020. A moderate
+   mix of geometric and photometric ops without per-dataset tuning.
+4. `ToTensor()`, then `Normalize(mean, std)` from `data_stats.json`.
 
 Eval transform: `Resize(256) → CenterCrop(224) → ToTensor → Normalize`.
 Identical to what was used for stat compute, which means there's no
 distribution mismatch between the stats I normalise with and the
 distribution the model sees at inference time.
 
-### 3.5 Mixup and CutMix (`src/mixup.py`)
+#### What I removed and why
 
-Per batch, with overall probability 0.5, I either mixup (Zhang et al.
-2018, α=0.2 → tightly peaked toward λ=0.5) or cutmix (Yun et al. 2019,
-α=1.0 → uniform on `[0,1]`). When active, the choice is 50/50.
+My first pass stacked a much heavier regularisation pipeline on top of
+this: `RandAugment(magnitude=9)` instead of 7, plus `ColorJitter(0.3, 0.3,
+0.3)`, `RandomErasing(p=0.25)`, Mixup (α=0.2), and CutMix (α=1.0) applied
+per-batch with overall probability 0.5. Combined with the zero-init-final-BN
+trick (§2.8), label smoothing 0.1, weight decay 5e-4, and `Dropout(0.2)`,
+the model couldn't fit its own training data — final clean trainval
+accuracy was 12.9 % after the full 30-epoch run, only marginally above the
+1/37 ≈ 2.7 % random baseline.
 
-The two interact differently with the model:
+Strong regularisation works on ImageNet-scale data because the data does
+the heavy lifting and regularisation prevents the inevitable overfit. With
+3 312 training images and only 30 epochs (≈ 750 optimiser steps) from
+scratch, the network never gets enough clean signal through that stack to
+build useful features. Dropping ColorJitter (redundant with RandAugment),
+RandomErasing (one regulariser too many), softening RandAugment to
+magnitude 7, and disabling Mixup / CutMix produced a recipe the model can
+actually fit. The Mixup / CutMix code lives on in `src/mixup.py` so they
+can be re-enabled with a single constant flip in `train.py` (`MIX_PROB`).
 
-- **Mixup** smears whole images linearly in pixel space. After Normalize,
-  this is a well-defined averaging in feature space.
-- **CutMix** pastes a random rectangular patch from another image in the
-  batch onto this one. The realised λ is recomputed from the *actual*
-  pasted area to absorb integer rounding in the bbox math.
+### 3.5 Mixup and CutMix (`src/mixup.py`, currently disabled)
 
-In both cases the soft target is `λ · smoothed_one_hot(y_a) + (1-λ) ·
-smoothed_one_hot(y_b)` — including label smoothing — and the loss is a
-single soft-target cross-entropy. When no mix is sampled, the soft target
-is just the smoothed one-hot, which is bit-identical to what
-`nn.CrossEntropyLoss(label_smoothing=0.1)` would produce. One code path,
-no branching in the train loop.
+Implementation summary, retained for reference:
+
+- Per batch, with probability `MIX_PROB`, either Mixup (Zhang et al. 2018,
+  α=0.2 → λ tightly peaked toward 0.5) or CutMix (Yun et al. 2019, α=1.0 →
+  λ uniform on `[0, 1]`). When active, the choice is 50/50.
+- Mixup smears whole images linearly in pixel space; CutMix pastes a
+  random rectangular patch from another image in the batch and recomputes
+  λ from the *realised* patch area.
+- Soft target = `λ · smoothed_one_hot(y_a) + (1 − λ) · smoothed_one_hot(y_b)`,
+  loss is soft-target cross-entropy. When no mix happens the soft target
+  is just the smoothed one-hot and the loss is bit-identical to
+  `nn.CrossEntropyLoss(label_smoothing=0.1)` — one code path, no branching.
+
+`MIX_PROB` defaults to 0.0 in `train.py` for the reasons in §3.4. If a
+future re-run has the data budget for it, `MIX_PROB = 0.5` re-enables the
+original recipe with no further code changes.
 
 ## 4. Training recipe
 
@@ -253,8 +271,10 @@ cross-entropy so it composes with mixup / CutMix without special cases.
   per *optimiser step* so it works correctly with gradient accumulation.
 
 OneCycle gives me about 5 epochs of warmup to ~lr=0.1, then a long cosine
-decay back down. The combination of a high peak LR + label smoothing +
-mixup/CutMix is a classic from-scratch recipe.
+decay back down. With Mixup / CutMix disabled (§3.5), the combination of a
+high peak LR + label smoothing 0.1 + RandAugment is the from-scratch
+recipe that consistently lets a small ResNet actually fit on a small
+dataset.
 
 ### 4.3 Mixed precision
 
@@ -351,12 +371,14 @@ The spec's ±3 % margin is comfortably met on re-runs of the full pipeline.
   the realistic ceiling on this data budget is in the high 60s to low 70s.
 - **Single-crop accuracy** (no mult-crop/ten-crop). Worth a few tenths of
   a percent in either direction.
-- **Heavy regularisation stack** (RandAugment + ColorJitter +
-  RandomErasing + Mixup + CutMix + label smoothing + weight decay).
-  There's some risk of *under-fitting* the train set in 30 epochs; if
-  clean-train accuracy at epoch 30 is below ~80 %, the first knob I'd
-  back off is RandAugment magnitude, then disable ColorJitter (which is
-  the most redundant given RandAugment's colour ops).
+- **Regularisation budget**. After the initial heavy stack failed (see
+  §3.4), the recipe is intentionally minimal: RandomResizedCrop, HFlip,
+  RandAugment(magnitude=7), label smoothing 0.1, weight decay 5e-4,
+  dropout 0.2. If a future run with more compute shows the model clearly
+  overfitting (clean-train ≫ val), I'd add things back in this order:
+  RandomErasing(p=0.25), then ColorJitter, then Mixup at α=0.2 with
+  `MIX_PROB = 0.25`. The soft-target loss path already supports all of
+  these, so the change is one constant per regulariser.
 - **Determinism cost**: `cudnn.deterministic = True` costs ~10–20 % of
   per-step throughput. Worth it for the spec's reproducibility margin.
 

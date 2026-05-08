@@ -43,6 +43,12 @@ MOMENTUM = 0.9
 # why: pct_start = 5/30 = 0.1667 - five epochs of warmup, twenty-five of
 # cosine decay. Standard OneCycle / super-convergence shape.
 ONE_CYCLE_PCT_START = 0.17
+# why: mixup + CutMix off. Both are great regularisers when there's enough
+# data and enough optimiser steps to recover the lost signal; on 3.3K images
+# trained for 30 epochs from scratch they prevented the model from fitting
+# at all (12.9% trainval accuracy). The implementation lives on in
+# src/mixup.py for traceability and easy re-enable.
+MIX_PROB = 0.0
 
 
 def _try_batch_size(model: nn.Module, device: torch.device, batch_size: int) -> bool:
@@ -170,6 +176,7 @@ def main() -> None:
             scaler,
             device=device,
             num_classes=NUM_CLASSES,
+            mix_prob=MIX_PROB,
             accum_steps=accum_steps,
             epoch_idx=epoch,
             epochs=EPOCHS,

@@ -117,11 +117,16 @@ def get_data_stats(seed: int = 42) -> dict:
 
 
 def build_train_transform(mean: list[float], std: list[float]) -> T.Compose:
-    """Aggressive train augmentation: spatial + photometric + erasing.
+    """Train augmentation: spatial crop + flip + a moderate RandAugment.
 
-    Order matters — PIL-domain transforms (RandomResizedCrop, RandAugment,
-    ColorJitter) run before ToTensor, tensor-domain transforms (Normalize,
-    RandomErasing) run after.
+    why: I started with a much heavier stack (RandAugment magnitude 9 +
+    ColorJitter + RandomErasing + Mixup + CutMix) and saw the model fail to
+    fit even its own training data in 30 epochs — 12.9% trainval accuracy
+    after the full run, way below the noise floor I'd expect from a model
+    that's actually learning. Stripping back to this minimal set let the
+    residual branches actually carry signal. RandAugment is kept at a softer
+    magnitude=7 because it's the single regulariser with the best
+    cost / benefit on small-image classification.
     """
     return T.Compose(
         [
@@ -130,16 +135,12 @@ def build_train_transform(mean: list[float], std: list[float]) -> T.Compose:
             # still giving useful translation/scale variance.
             T.RandomResizedCrop(IMAGE_SIZE, scale=(0.6, 1.0)),
             T.RandomHorizontalFlip(),
-            # why: RandAugment (Cubuk et al., 2020) — magnitude 9 / 2 ops gives
-            # a strong default mix of geometric and photometric augmentations
-            # without per-dataset tuning.
-            T.RandAugment(num_ops=2, magnitude=9),
-            T.ColorJitter(0.3, 0.3, 0.3),
+            # why: RandAugment (Cubuk et al., 2020), magnitude 7 / 2 ops.
+            # Magnitude 9 was too aggressive at this data scale; 7 keeps the
+            # geometric / photometric mix without crippling early learning.
+            T.RandAugment(num_ops=2, magnitude=7),
             T.ToTensor(),
             T.Normalize(mean, std),
-            # why: RandomErasing on the normalized tensor (Zhong et al., 2017).
-            # Low p=0.25 because it stacks with RandAugment and CutMix later.
-            T.RandomErasing(p=0.25),
         ]
     )
 

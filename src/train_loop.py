@@ -26,6 +26,7 @@ def train_one_epoch(
     device: torch.device,
     num_classes: int = 37,
     label_smoothing: float = 0.1,
+    mix_prob: float = 0.0,
     accum_steps: int = 1,
     epoch_idx: int = 0,
     epochs: int = 0,
@@ -35,7 +36,9 @@ def train_one_epoch(
     why: I always mix-then-apply-soft-target-CE, even when no mixup/cutmix
     fires (maybe_mix returns the smoothed one-hot in that case). One code
     path means fewer places for the loss to silently disagree with the
-    PyTorch CrossEntropyLoss(label_smoothing) version.
+    PyTorch CrossEntropyLoss(label_smoothing) version. mix_prob defaults to
+    0.0 - mixup / CutMix were preventing the model from fitting at this data
+    scale - but the implementation lives on in src/mixup.py for re-enabling.
     """
     model.train()
     loss_meter = AverageMeter()
@@ -48,7 +51,7 @@ def train_one_epoch(
 
         mixed_images, soft_targets = maybe_mix(
             images, labels, num_classes=num_classes,
-            smoothing=label_smoothing,
+            smoothing=label_smoothing, mix_prob=mix_prob,
         )
 
         with torch.amp.autocast("cuda"):

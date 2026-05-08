@@ -61,10 +61,12 @@ Pulled from `torchinfo.summary(model, (1,3,224,224))` in `MODEL_SUMMARY.txt`.
 
 ## Q6 — Loss function
 
-**Answer:** `Cross-entropy with label smoothing (epsilon = 0.1) — implemented as soft-target cross-entropy so it composes with mixup and CutMix.`
+**Answer:** `Cross-entropy with label smoothing (epsilon = 0.1), implemented as soft-target cross-entropy.`
 
-When no mix happens the soft target is just the smoothed one-hot, which
-matches `nn.CrossEntropyLoss(label_smoothing=0.1)` numerically.
+The soft-target form is numerically identical to
+`nn.CrossEntropyLoss(label_smoothing=0.1)` for hard labels and would compose
+cleanly with Mixup / CutMix if those were re-enabled (they're currently off
+— see Q11).
 
 ## Q7 — Optimisation algorithm
 
@@ -95,12 +97,15 @@ about) stays at 128.
 
 ## Q11 — Training augmentations / transforms
 
-**Answer (comma-separated, applied in this order):** `RandomResizedCrop(224, scale=(0.6, 1.0)), RandomHorizontalFlip, RandAugment(num_ops=2, magnitude=9), ColorJitter(0.3, 0.3, 0.3), ToTensor, Normalize(per-channel mean/std computed from trainval), RandomErasing(p=0.25), Mixup (alpha=0.2) and CutMix (alpha=1.0) applied per-batch with overall probability 0.5 (50/50 split between the two when active)`
+**Answer (comma-separated, applied in this order):** `RandomResizedCrop(224, scale=(0.6, 1.0)), RandomHorizontalFlip, RandAugment(num_ops=2, magnitude=7), ToTensor, Normalize(per-channel mean/std computed from trainval)`
 
-Mixup / CutMix happen on tensors after the DataLoader fetch, so they're
-strictly speaking batch-level augmentation rather than per-sample, but I've
-listed them here because the spec is asking about "training data
-augmentation" broadly.
+I deliberately stripped the regularisation back from a heavier first attempt
+(RandAugment magnitude 9 + ColorJitter + RandomErasing + Mixup + CutMix +
+label smoothing): on 3 312 training images for only 30 epochs from scratch,
+that stack stopped the model from fitting its own training data. The
+implementations of Mixup / CutMix still live in `src/mixup.py` and the
+soft-target CE path is intact — they're disabled by default
+(`MIX_PROB = 0.0` in `train.py`) rather than removed.
 
 ## Q12 — Total images in the training set
 

@@ -19,8 +19,8 @@ structure are deliberately different from torchvision/timm reference impls):
   * Ramachandran, Zoph, Le, 2017 - "Searching for Activation Functions",
     arXiv:1710.05941. The Swish/SiLU activation I use throughout.
   * Goyal et al., 2017 - "Accurate, Large Minibatch SGD", arXiv:1706.02677.
-    The zero-init-final-BN trick I apply in _init_weights so each residual
-    branch starts at zero, easing the high lr=0.1 OneCycle warmup.
+    Source of the zero-init-final-BN trick I tried and later reverted in
+    _init_weights - it stalled learning at this data scale (see comment).
 """
 
 from __future__ import annotations
@@ -230,13 +230,14 @@ class PetClassifier(nn.Module):
                 if module.bias is not None:
                     nn.init.zeros_(module.bias)
 
-        # why: zero-init the second BN (bn_b) in every residual block.
-        # With gamma=0 the residual branch outputs zero at init, so the
-        # whole network behaves as identity until SGD starts moving things.
-        # Stabilises the early high-lr phase of OneCycle (Goyal et al., 2017).
-        for module in self.modules():
-            if isinstance(module, PreActSEBlock):
-                nn.init.zeros_(module.bn_b.weight)
+        # why: I tried zeroing bn_b's gamma in every residual block (the
+        # Goyal et al. 2017 trick) so each residual branch starts at zero
+        # and the network is exactly identity at init. On ImageNet-scale
+        # training that stabilises the early high-LR phase, but at this data
+        # scale (3.3K images, 30 epochs, ~750 optimiser steps) the residual
+        # branches never woke up - clean-train accuracy stalled in the low
+        # double digits. Letting bn_b.weight stay at the default 1.0 puts
+        # signal through the residual branches from step 1.
 
     def forward(self, image: torch.Tensor) -> torch.Tensor:
         feat = self.stem_conv(image)
