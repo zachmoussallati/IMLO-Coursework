@@ -141,6 +141,13 @@ def build_train_transform(mean: list[float], std: list[float]) -> T.Compose:
             T.RandAugment(num_ops=2, magnitude=7),
             T.ToTensor(),
             T.Normalize(mean, std),
+            # why: RandomErasing (Zhong et al., 2017) on the normalized
+            # tensor. Of the regularisers I stripped during the bring-up,
+            # this is the one most worth re-adding: it closes the
+            # train-test gap (the previous run had 60.84 / 45.60 = 15pp
+            # gap, plenty of room) and the model can comfortably train
+            # through it because it only fires on a quarter of batches.
+            T.RandomErasing(p=0.25),
         ]
     )
 

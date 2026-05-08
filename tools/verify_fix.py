@@ -42,11 +42,14 @@ def main() -> None:
         generator=generator, worker_init_fn=worker_init,
     )
 
-    opt = optim.SGD(model.parameters(), lr=0.1, momentum=0.9,
+    # Match train.py's MAX_LR so this verify reflects the live recipe.
+    max_lr = 5e-2
+    opt = optim.SGD(model.parameters(), lr=max_lr, momentum=0.9,
                     nesterov=True, weight_decay=5e-4)
     steps = len(loaders["train"]) * QUICK_EPOCHS
     sched = optim.lr_scheduler.OneCycleLR(
-        opt, max_lr=0.1, total_steps=steps, pct_start=0.17, anneal_strategy="cos",
+        opt, max_lr=max_lr, total_steps=steps, pct_start=0.17,
+        anneal_strategy="cos",
     )
     scaler = torch.amp.GradScaler("cuda")
 
