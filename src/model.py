@@ -136,8 +136,16 @@ class PetClassifier(nn.Module):
         num_classes: int = 37,
         head_dropout: float = 0.2,
         se_reduction: int = 16,
+        widths: tuple[int, int, int, int] = (64, 128, 256, 512),
     ) -> None:
         super().__init__()
+
+        # why: `widths` is a non-breaking knob added for experimentation.
+        # The default (64, 128, 256, 512) reproduces the locked baseline
+        # architecture bit-identically; smaller variants (e.g. 32/64/128/
+        # 256) are tried under experiments/ without touching the locked
+        # recipe.
+        w1, w2, w3, w4 = widths
 
         # why: 3x3 stride-2 stem instead of the classic 7x7. With 224x224
         # inputs and only ~3.3K training images, the 7x7 ImageNet stem
@@ -145,7 +153,7 @@ class PetClassifier(nn.Module):
         # stem halves resolution once but keeps fine-grained edges that
         # later SE blocks can weight.
         self.stem_conv = nn.Conv2d(
-            in_channels=3, out_channels=64, kernel_size=3,
+            in_channels=3, out_channels=w1, kernel_size=3,
             stride=2, padding=1, bias=False,
         )
         # why: no MaxPool after the stem. Standard ImageNet ResNets follow
@@ -155,26 +163,26 @@ class PetClassifier(nn.Module):
         # dataset often differ in fine markings, not gross silhouette.
 
         self.stage1 = self._make_stage(
-            in_channels=64, out_channels=64, num_blocks=2,
+            in_channels=w1, out_channels=w1, num_blocks=2,
             first_stride=1, se_reduction=se_reduction,
         )
         self.stage2 = self._make_stage(
-            in_channels=64, out_channels=128, num_blocks=2,
+            in_channels=w1, out_channels=w2, num_blocks=2,
             first_stride=2, se_reduction=se_reduction,
         )
         self.stage3 = self._make_stage(
-            in_channels=128, out_channels=256, num_blocks=2,
+            in_channels=w2, out_channels=w3, num_blocks=2,
             first_stride=2, se_reduction=se_reduction,
         )
         self.stage4 = self._make_stage(
-            in_channels=256, out_channels=512, num_blocks=2,
+            in_channels=w3, out_channels=w4, num_blocks=2,
             first_stride=2, se_reduction=se_reduction,
         )
 
         # why: final BN+SiLU before pooling. Pre-activation blocks end with
         # a conv (not an activation), so without this the head would average
         # un-normalized, un-activated features.
-        self.final_bn = nn.BatchNorm2d(512)
+        self.final_bn = nn.BatchNorm2d(w4)
         self.final_act = nn.SiLU(inplace=True)
 
         self.global_pool = nn.AdaptiveAvgPool2d(1)
@@ -182,7 +190,7 @@ class PetClassifier(nn.Module):
         # interacts poorly with BN; this much complements weight decay
         # without hurting convergence in 30 epochs.
         self.head_dropout = nn.Dropout(p=head_dropout)
-        self.classifier = nn.Linear(512, num_classes)
+        self.classifier = nn.Linear(w4, num_classes)
 
         self._init_weights()
 
@@ -251,6 +259,14 @@ class PetClassifier(nn.Module):
         return self.classifier(pooled)
 
 
-def build_model(num_classes: int = 37) -> PetClassifier:
-    """Factory used by train.py and test.py - keeps the construction in one place."""
-    return PetClassifier(num_classes=num_classes)
+def build_model(
+    num_classes: int = 37,
+    widths: tuple[int, int, int, int] = (64, 128, 256, 512),
+) -> PetClassifier:
+    """Factory used by train.py and test.py - keeps the construction in one place.
+
+    why widths kwarg: lets experiments under experiments/ try smaller / wider
+    architectures without copying the whole module. Default reproduces the
+    locked baseline.
+    """
+    return PetClassifier(num_classes=num_classes, widths=widths)
