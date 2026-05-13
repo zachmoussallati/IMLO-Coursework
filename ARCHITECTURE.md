@@ -320,6 +320,28 @@ After training:
   through the *same* function `test.py` calls. This guarantees the number
   reported by `train.py` matches what the markers see.
 
+## 4.8 Experiments I ran on top of the baseline
+
+After the locked recipe landed at 60.84 / 45.60, I built a small sandbox
+under `experiments/` and tried a handful of variants. Each was an
+isolated script that loaded the locked model.pth (cheap) or retrained
+from scratch (~25 min), wrote a `result.json`, and printed a Δ vs the
+current baseline. Two won and were promoted; four lost.
+
+| Experiment | Q15 | Δ vs prev | Outcome |
+|---|---|---|---|
+| 3-scale + HFlip TTA (`exp_multi_scale_tta.py`) | 46.42 % | +0.82 | promoted into `test.py` |
+| 7-scale TTA grid search (`exp_tta_search.py`) | 46.74 % | +0.32 | promoted (dense_7scale) |
+| EMA decay=0.999 (`exp_ema.py`) | n/a | — | aborted at epoch 8; decay too slow for a 30-epoch budget |
+| EMA decay=0.99 (`exp_ema_fast.py`) | 43.17 % | −3.57 | lost; EMA still lags the converged model |
+| TrivialAugmentWide (`exp_trivial_augment.py`) | 42.76 % | −3.98 | lost; untuned magnitude too aggressive for the data |
+| Smaller model `(32,64,128,256)` (`exp_smaller_model.py`) | 38.89 % | −7.53 | lost; recipe is data-bottlenecked, not capacity-bottlenecked |
+
+The TTA experiments cost almost nothing (no retraining, deterministic
+inference) and stacked for +1.14 pp over the original HFlip-only TTA.
+The retraining experiments all lost — useful negative evidence in its
+own right, and explained in `experiments/README.md`.
+
 ## 5. Test-time augmentation (`test.py`)
 
 I run **fourteen** forward passes per test image and **sum the softmax
