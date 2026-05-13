@@ -30,12 +30,14 @@ from src.train_loop import evaluate_test_with_multiscale_tta
 BATCH_SIZE = 128
 NUM_WORKERS = 2
 MODEL_PATH = "model.pth"
-# why: 3-scale TTA. Promoted from experiments/exp_multi_scale_tta.py after
-# it beat the HFlip-only baseline by +0.82pp (45.60% -> 46.42%). 224 keeps
-# the full image, 256 matches the train-time eval transform, 288 gives a
-# zoomed-in centre crop. Each scale runs with its HFlip, softmax probs are
-# summed across all six views.
-TTA_SCALES = (224, 256, 288)
+# why: 7-scale TTA. Promoted from experiments/exp_tta_search.py after it
+# beat the 3-scale baseline by +0.32pp (46.42% -> 46.74%). The two TTA
+# promotions stacked are +1.14pp over the single-view 45.60% HFlip-only
+# baseline. Scales centred on the 256 train-time eval, with steps of 16
+# either side. 10-crop variants were worse at this dataset because pets
+# are typically centred and corner crops cut the subject. Each scale runs
+# with its HFlip; softmax probs are summed across all 14 views.
+TTA_SCALES = (208, 224, 240, 256, 272, 288, 304)
 
 
 def main() -> None:

@@ -322,29 +322,38 @@ After training:
 
 ## 5. Test-time augmentation (`test.py`)
 
-I run six forward passes per test image and **sum the softmax
+I run **fourteen** forward passes per test image and **sum the softmax
 probabilities** before argmax:
 
-- Resize to `{224, 256, 288}` → CenterCrop(224) → Normalize, model
-  forward
+- Resize to `{208, 224, 240, 256, 272, 288, 304}` → CenterCrop(224) →
+  Normalize, model forward
 - Horizontal flip of each of the above
 
 `Resize(256) → CenterCrop(224)` is the same view the model trained on;
-`Resize(224)` keeps the whole image at the original aspect; `Resize(288)`
-gives a ~13 % zoomed-in centre crop. Each scale is run with its HFlip, so
-the ensemble averages six related-but-distinct views of the same test
-image — no external data, just multiple looks. Averaging probabilities
-(not logits) is the principled choice because softmax is non-linear:
-averaging logits and then softmax-ing gives a different (and in general
-worse) ensemble.
+smaller scales (208, 224, 240) fit more of the image into the 224 crop;
+larger scales (272, 288, 304) give progressively more zoomed-in centre
+crops. Each scale is run with its HFlip, so the ensemble averages
+fourteen related-but-distinct views of the same test image — no external
+data, just multiple looks. Averaging probabilities (not logits) is the
+principled choice because softmax is non-linear: averaging logits and
+then softmax-ing gives a different (and in general worse) ensemble.
 
-This was added after the single-scale HFlip baseline landed at 45.60 %.
-A controlled experiment (`experiments/exp_multi_scale_tta.py`) showed
-the multi-scale ensemble lifts test accuracy to 46.42 % on the same
-weights — +0.82 pp, well above my 0.5 pp noise threshold — so it's
-promoted into the live `evaluate_test_with_multiscale_tta` in
-`src/train_loop.py`. The model is unchanged; only the inference path is
-fancier.
+This was added in two passes after the single-view HFlip baseline landed
+at 45.60 %:
+
+| Stage | Q15 | Δ vs prev | Source |
+|---|---|---|---|
+| HFlip only | 45.60 % | — | original |
+| 3-scale + HFlip | 46.42 % | +0.82 | `experiments/exp_multi_scale_tta.py` |
+| 7-scale + HFlip | 46.74 % | +0.32 | `experiments/exp_tta_search.py` |
+
+The 7-scale grid search also tested wider/denser scale ranges and
+10-crop / 10-crop-multi-scale combinations. 10-crop hurt accuracy
+(44.29 % at scale 256) because pets in this dataset are typically
+centred, so the corner crops cut off parts of the subject. Live code
+uses the 7-scale + HFlip variant via `evaluate_test_with_multiscale_tta`
+in `src/train_loop.py`. The model is unchanged from training; only the
+inference path is more thorough.
 
 ## 6. Considered and rejected
 

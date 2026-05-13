@@ -132,16 +132,24 @@ final block of `train.py`.
 
 ## Q15 — Accuracy on the official test set
 
-**Answer:** `46.42 %`
+**Answer:** `46.74 %`
 
-Evaluated on all 3 669 test images with **3-scale + horizontal-flip TTA**.
-For each test image I build three eval transforms — `Resize(224)`,
-`Resize(256)`, `Resize(288)`, each followed by `CenterCrop(224)` and the
-trainval-derived `Normalize` — run the model and its horizontal flip
-through each, and sum the softmax probabilities across all six views.
-Argmax over the accumulated total is the prediction. This is the same
-function `test.py` calls, so `train.py`'s reported number matches what
-the markers see when they run `python test.py`.
+Evaluated on all 3 669 test images with **7-scale + horizontal-flip TTA**.
+For each test image I build seven eval transforms — `Resize(s)` for
+`s ∈ {208, 224, 240, 256, 272, 288, 304}`, each followed by
+`CenterCrop(224)` and the trainval-derived `Normalize` — run the model
+and its horizontal flip through each, and sum the softmax probabilities
+across all fourteen views. Argmax over the accumulated total is the
+prediction. This is the same function `test.py` calls, so `train.py`'s
+reported number matches what the markers see when they run
+`python test.py`.
 
-Promoted from `experiments/exp_multi_scale_tta.py` after it beat the
-HFlip-only baseline by +0.82pp (45.60 % → 46.42 %).
+Promotion history:
+
+| Step | Q15 | Δ |
+|---|---|---|
+| HFlip only (original) | 45.60 % | — |
+| 3-scale + HFlip (promoted from `experiments/exp_multi_scale_tta.py`) | 46.42 % | +0.82 |
+| 7-scale + HFlip (promoted from `experiments/exp_tta_search.py`) | **46.74 %** | +0.32 |
+
+Same model weights throughout — only the inference path got smarter.

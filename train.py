@@ -218,14 +218,14 @@ def main() -> None:
         data_root=DATA_ROOT,
         stats=loaders["stats"],
         device=device,
-        scales=(224, 256, 288),
+        scales=(208, 224, 240, 256, 272, 288, 304),
         batch_size=batch_size,
         num_workers=2,
     )
     q14 = full_trainval["acc"] * 100
     q15 = test_acc * 100
     print(f"[train] Q14 trainval (3680 images, eval transform): {q14:.2f}%")
-    print(f"[train] Q15 test (3669 images, 3-scale +HFlip TTA): {q15:.2f}%")
+    print(f"[train] Q15 test (3669 images, 7-scale +HFlip TTA): {q15:.2f}%")
 
     answers = Path("submission_answers.md")
     if answers.exists():
