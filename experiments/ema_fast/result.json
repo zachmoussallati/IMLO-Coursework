@@ -1,0 +1,11 @@
+{
+  "experiment": "ema_fast",
+  "decay": 0.99,
+  "raw_q14_trainval_acc_pct": 60.84,
+  "ema_q14_trainval_acc_pct": 57.45,
+  "raw_q15_test_acc_pct": 46.74,
+  "ema_q15_test_acc_pct": 43.17,
+  "baseline_test_acc_pct": 46.74,
+  "delta_pp": -3.57,
+  "verdict": "WORSE THAN BASELINE"
+}
