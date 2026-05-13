@@ -1,0 +1,17 @@
+{
+  "experiment": "multi_scale_tta",
+  "scales": [
+    224,
+    256,
+    288
+  ],
+  "per_scale_test_acc_pct": {
+    "224": 45.243935677296264,
+    "256": 45.59825565549196,
+    "288": 44.42627418915236
+  },
+  "ensembled_test_acc_pct": 46.42,
+  "baseline_test_acc_pct": 45.6,
+  "delta_pp": 0.82,
+  "verdict": "BEATS BASELINE"
+}
