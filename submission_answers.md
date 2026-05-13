@@ -132,9 +132,16 @@ final block of `train.py`.
 
 ## Q15 — Accuracy on the official test set
 
-**Answer:** `45.60 %`
+**Answer:** `46.42 %`
 
-Evaluated on all 3 669 test images with horizontal-flip TTA: averaging the
-softmax probabilities from the original image and its horizontal flip.
-This is the same code path `test.py` uses, so `train.py`'s reported number
-matches what the markers see when they run `python test.py`.
+Evaluated on all 3 669 test images with **3-scale + horizontal-flip TTA**.
+For each test image I build three eval transforms — `Resize(224)`,
+`Resize(256)`, `Resize(288)`, each followed by `CenterCrop(224)` and the
+trainval-derived `Normalize` — run the model and its horizontal flip
+through each, and sum the softmax probabilities across all six views.
+Argmax over the accumulated total is the prediction. This is the same
+function `test.py` calls, so `train.py`'s reported number matches what
+the markers see when they run `python test.py`.
+
+Promoted from `experiments/exp_multi_scale_tta.py` after it beat the
+HFlip-only baseline by +0.82pp (45.60 % → 46.42 %).

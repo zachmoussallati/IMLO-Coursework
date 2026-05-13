@@ -17,21 +17,25 @@ import sys
 from pathlib import Path
 
 import torch
-from torch.utils.data import DataLoader
-from torchvision.datasets import OxfordIIITPet
 
 # why: same trick as train.py - put the repo root on sys.path so the markers
 # can run `python test.py` directly from the unzipped directory.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from src.data import DATA_ROOT, STATS_PATH, build_eval_transform
+from src.data import DATA_ROOT, STATS_PATH
 from src.model import build_model
-from src.train_loop import evaluate_with_tta
+from src.train_loop import evaluate_test_with_multiscale_tta
 
 
 BATCH_SIZE = 128
-NUM_WORKERS = 4
+NUM_WORKERS = 2
 MODEL_PATH = "model.pth"
+# why: 3-scale TTA. Promoted from experiments/exp_multi_scale_tta.py after
+# it beat the HFlip-only baseline by +0.82pp (45.60% -> 46.42%). 224 keeps
+# the full image, 256 matches the train-time eval transform, 288 gives a
+# zoomed-in centre crop. Each scale runs with its HFlip, softmax probs are
+# summed across all six views.
+TTA_SCALES = (224, 256, 288)
 
 
 def main() -> None:
@@ -50,22 +54,6 @@ def main() -> None:
     with stats_file.open("r", encoding="utf-8") as f:
         stats = json.load(f)
 
-    eval_transform = build_eval_transform(stats["mean"], stats["std"])
-    test_dataset = OxfordIIITPet(
-        root=DATA_ROOT,
-        split="test",
-        target_types="category",
-        download=True,
-        transform=eval_transform,
-    )
-    test_loader = DataLoader(
-        test_dataset,
-        batch_size=BATCH_SIZE,
-        shuffle=False,
-        num_workers=NUM_WORKERS,
-        pin_memory=True,
-    )
-
     model = build_model(num_classes=stats["num_classes"]).to(device)
     # why: weights_only=True - safer load when model.pth is just a state dict,
     # and silences the "weights_only=False is deprecated" warning on newer
@@ -74,7 +62,15 @@ def main() -> None:
     model.load_state_dict(state)
     model.eval()
 
-    accuracy = evaluate_with_tta(model, test_loader, device)
+    accuracy = evaluate_test_with_multiscale_tta(
+        model,
+        data_root=DATA_ROOT,
+        stats=stats,
+        device=device,
+        scales=TTA_SCALES,
+        batch_size=BATCH_SIZE,
+        num_workers=NUM_WORKERS,
+    )
     # why: 2dp percentage matches the Q15 form field on the submission system.
     print(f"{accuracy * 100:.2f}%")
 

@@ -8,8 +8,8 @@ I require CUDA - the script fails loudly if torch.cuda.is_available() is
 False so I find out before wasting time on a half-broken setup.
 
 End-of-run output prints both Q14 (full trainval accuracy under the eval
-transform) and Q15 (test accuracy with horizontal-flip TTA), and patches
-those numbers into submission_answers.md if it exists.
+transform) and Q15 (test accuracy with 3-scale + horizontal-flip TTA),
+and patches those numbers into submission_answers.md if it exists.
 """
 
 from __future__ import annotations
@@ -25,10 +25,14 @@ from torch import nn, optim
 # whether train.py is executed as a module or as a plain script.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from src.data import build_loaders, NUM_CLASSES
+from src.data import DATA_ROOT, NUM_CLASSES, build_loaders
 from src.model import build_model
 from src.mixup import soft_target_cross_entropy
-from src.train_loop import evaluate, evaluate_with_tta, train_one_epoch
+from src.train_loop import (
+    evaluate,
+    evaluate_test_with_multiscale_tta,
+    train_one_epoch,
+)
 from src.utils import make_worker_init, seed_all, write_model_summary
 
 
@@ -206,11 +210,22 @@ def main() -> None:
 
     # Final reporting (Q14, Q15)
     full_trainval = evaluate(model, loaders["full_trainval"], device)
-    test_acc = evaluate_with_tta(model, loaders["test"], device)
+    # why: same multi-scale + HFlip TTA path that test.py uses, so the
+    # number I print here matches what the markers see when they run
+    # python test.py.
+    test_acc = evaluate_test_with_multiscale_tta(
+        model,
+        data_root=DATA_ROOT,
+        stats=loaders["stats"],
+        device=device,
+        scales=(224, 256, 288),
+        batch_size=batch_size,
+        num_workers=2,
+    )
     q14 = full_trainval["acc"] * 100
     q15 = test_acc * 100
     print(f"[train] Q14 trainval (3680 images, eval transform): {q14:.2f}%")
-    print(f"[train] Q15 test (3669 images, +HFlip TTA):         {q15:.2f}%")
+    print(f"[train] Q15 test (3669 images, 3-scale +HFlip TTA): {q15:.2f}%")
 
     answers = Path("submission_answers.md")
     if answers.exists():
