@@ -1,0 +1,15 @@
+{
+  "experiment": "smaller_model",
+  "widths": [
+    32,
+    64,
+    128,
+    256
+  ],
+  "param_count": 2828245,
+  "q14_trainval_acc_pct": 50.71,
+  "q15_test_acc_pct": 38.89,
+  "baseline_test_acc_pct": 46.42,
+  "delta_pp": -7.53,
+  "verdict": "WORSE THAN BASELINE"
+}

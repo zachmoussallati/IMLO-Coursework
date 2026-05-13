@@ -1,0 +1,10 @@
+{
+  "experiment": "trivial_augment",
+  "notes": "Internally scored Q15 with HFlip-only TTA (the script was written before the multi-scale TTA promotion). I later re-evaluated experiments/trivial_augment/model.pth with the live 7-scale + HFlip TTA path and recorded that as q15_test_acc_pct_7scale.",
+  "q14_trainval_acc_pct": 55.46,
+  "q15_test_acc_pct_hflip": 42.25,
+  "q15_test_acc_pct_7scale": 42.76,
+  "baseline_test_acc_pct": 46.74,
+  "delta_pp": -3.98,
+  "verdict": "WORSE THAN BASELINE"
+}
