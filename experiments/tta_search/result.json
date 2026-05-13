@@ -1,0 +1,136 @@
+{
+  "baseline_test_acc_pct": 46.42,
+  "ranked": [
+    {
+      "name": "dense_7scale",
+      "kind": "multiscale",
+      "scales": [
+        208,
+        224,
+        240,
+        256,
+        272,
+        288,
+        304
+      ],
+      "test_acc_pct": 46.74,
+      "delta_vs_baseline_pp": 0.32,
+      "verdict": "BEATS BASELINE",
+      "diagnostics": {
+        "scale_208": 44.75,
+        "scale_224": 45.24,
+        "scale_240": 45.43,
+        "scale_256": 45.6,
+        "scale_272": 45.68,
+        "scale_288": 44.43,
+        "scale_304": 43.01
+      }
+    },
+    {
+      "name": "wide_5scale",
+      "kind": "multiscale",
+      "scales": [
+        216,
+        240,
+        256,
+        272,
+        296
+      ],
+      "test_acc_pct": 46.5,
+      "delta_vs_baseline_pp": 0.08,
+      "verdict": "within noise",
+      "diagnostics": {
+        "scale_216": 44.78,
+        "scale_240": 45.43,
+        "scale_256": 45.6,
+        "scale_272": 45.68,
+        "scale_296": 43.83
+      }
+    },
+    {
+      "name": "current_3scale",
+      "kind": "multiscale",
+      "scales": [
+        224,
+        256,
+        288
+      ],
+      "test_acc_pct": 46.42,
+      "delta_vs_baseline_pp": -0.0,
+      "verdict": "within noise",
+      "diagnostics": {
+        "scale_224": 45.24,
+        "scale_256": 45.6,
+        "scale_288": 44.43
+      }
+    },
+    {
+      "name": "dense_5scale",
+      "kind": "multiscale",
+      "scales": [
+        224,
+        240,
+        256,
+        272,
+        288
+      ],
+      "test_acc_pct": 46.28,
+      "delta_vs_baseline_pp": -0.14,
+      "verdict": "within noise",
+      "diagnostics": {
+        "scale_224": 45.24,
+        "scale_240": 45.43,
+        "scale_256": 45.6,
+        "scale_272": 45.68,
+        "scale_288": 44.43
+      }
+    },
+    {
+      "name": "tight_3scale",
+      "kind": "multiscale",
+      "scales": [
+        240,
+        256,
+        272
+      ],
+      "test_acc_pct": 45.76,
+      "delta_vs_baseline_pp": -0.66,
+      "verdict": "WORSE",
+      "diagnostics": {
+        "scale_240": 45.43,
+        "scale_256": 45.6,
+        "scale_272": 45.68
+      }
+    },
+    {
+      "name": "10crop_3scale",
+      "kind": "fivecrop_multiscale",
+      "scales": [
+        224,
+        256,
+        288
+      ],
+      "test_acc_pct": 44.89,
+      "delta_vs_baseline_pp": -1.53,
+      "verdict": "WORSE",
+      "diagnostics": {
+        "5crop_scale_224": 44.56,
+        "5crop_scale_256": 44.29,
+        "5crop_scale_288": 41.95
+      }
+    },
+    {
+      "name": "10crop_at_256",
+      "kind": "fivecrop_multiscale",
+      "scales": [
+        256
+      ],
+      "test_acc_pct": 44.29,
+      "delta_vs_baseline_pp": -2.13,
+      "verdict": "WORSE",
+      "diagnostics": {
+        "5crop_scale_256": 44.29
+      }
+    }
+  ]
+}
