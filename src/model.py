@@ -137,6 +137,7 @@ class PetClassifier(nn.Module):
         head_dropout: float = 0.2,
         se_reduction: int = 16,
         widths: tuple[int, int, int, int] = (64, 128, 256, 512),
+        use_maxpool: bool = False,
     ) -> None:
         super().__init__()
 
@@ -147,6 +148,14 @@ class PetClassifier(nn.Module):
         # recipe.
         w1, w2, w3, w4 = widths
 
+        # why: `use_maxpool` is a second non-breaking knob. Default False
+        # keeps the locked behaviour. When True, a 3x3 stride-2 MaxPool is
+        # inserted right after the stem conv (ImageNet-ResNet style), so
+        # stage 1 sees 56x56 features instead of 112x112. Used by
+        # experiments/exp_ablation_maxpool.py to test whether the
+        # ImageNet-style downsample improves things at this data scale.
+        self.use_maxpool = use_maxpool
+
         # why: 3x3 stride-2 stem instead of the classic 7x7. With 224x224
         # inputs and only ~3.3K training images, the 7x7 ImageNet stem
         # discards too much spatial information up front. A 3x3 stride-2
@@ -156,11 +165,18 @@ class PetClassifier(nn.Module):
             in_channels=3, out_channels=w1, kernel_size=3,
             stride=2, padding=1, bias=False,
         )
-        # why: no MaxPool after the stem. Standard ImageNet ResNets follow
-        # the 7x7 stem with MaxPool(3, stride=2) to drop to 56x56 before
-        # stage 1. I deliberately keep 112x112 going into stage 1 so the
-        # early SE block sees high-resolution features - breeds in this
-        # dataset often differ in fine markings, not gross silhouette.
+        if use_maxpool:
+            self.stem_maxpool: nn.Module = nn.MaxPool2d(
+                kernel_size=3, stride=2, padding=1,
+            )
+        else:
+            self.stem_maxpool = nn.Identity()
+        # why: locked baseline keeps `stem_maxpool = Identity` (no MaxPool
+        # after the stem). Standard ImageNet ResNets follow the 7x7 stem
+        # with MaxPool(3, stride=2) to drop to 56x56 before stage 1. I
+        # deliberately keep 112x112 going into stage 1 so the early SE
+        # block sees high-resolution features - breeds in this dataset
+        # often differ in fine markings, not gross silhouette.
 
         self.stage1 = self._make_stage(
             in_channels=w1, out_channels=w1, num_blocks=2,
@@ -249,6 +265,7 @@ class PetClassifier(nn.Module):
 
     def forward(self, image: torch.Tensor) -> torch.Tensor:
         feat = self.stem_conv(image)
+        feat = self.stem_maxpool(feat)
         feat = self.stage1(feat)
         feat = self.stage2(feat)
         feat = self.stage3(feat)
@@ -262,11 +279,20 @@ class PetClassifier(nn.Module):
 def build_model(
     num_classes: int = 37,
     widths: tuple[int, int, int, int] = (64, 128, 256, 512),
+    use_maxpool: bool = False,
 ) -> PetClassifier:
     """Factory used by train.py and test.py - keeps the construction in one place.
 
     why widths kwarg: lets experiments under experiments/ try smaller / wider
     architectures without copying the whole module. Default reproduces the
     locked baseline.
+
+    why use_maxpool kwarg: lets the +maxpool ablation under experiments/
+    swap in an ImageNet-style stem MaxPool without copying the architecture.
+    Default False keeps the locked baseline behaviour.
     """
-    return PetClassifier(num_classes=num_classes, widths=widths)
+    return PetClassifier(
+        num_classes=num_classes,
+        widths=widths,
+        use_maxpool=use_maxpool,
+    )
