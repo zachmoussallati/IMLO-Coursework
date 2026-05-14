@@ -2,8 +2,9 @@
 
 A 37-class image classifier for the [Oxford-IIIT Pet
 dataset](https://www.robots.ox.ac.uk/~vgg/data/pets/). Custom pre-activation
-ResNet with Squeeze-and-Excitation, ~11.3 M parameters, trained from scratch
-in 30 epochs on the official `trainval` split.
+ResNet with Squeeze-and-Excitation and a MaxPool stem, ~11.3 M parameters,
+trained from scratch in 30 epochs on the official 3 680-image `trainval`
+split. Evaluation uses 7-scale + horizontal-flip test-time augmentation.
 
 See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the design write-up and
 [`submission_answers.md`](submission_answers.md) for the Q1–Q15 form
@@ -42,15 +43,20 @@ Both scripts require CUDA. They will raise immediately if
 
 ## Expected runtime and accuracy
 
-- **Train**: ~15–25 minutes for the full 30-epoch run on a single modern
-  CUDA GPU (RTX 3080-class or better). The data pipeline fits comfortably
-  in 12 GB VRAM at batch size 128; if VRAM is tighter, `train.py`
-  automatically falls back to batch size 64 with gradient accumulation = 2
-  so the effective batch is unchanged.
-- **Test**: ~10 seconds for a TTA pass over the 3 669-image test split.
-- **Accuracy band**: I aim for the 65–75 % test accuracy range — realistic
-  for a from-scratch CNN trained on ~3.3 K images for 30 epochs without
-  any pretraining.
+- **Train**: ~10–15 minutes for the full 30-epoch run on a single modern
+  CUDA GPU (RTX 3080-class or better). The model uses a MaxPool right
+  after the stem, so stages run on quarter-area feature maps and per-epoch
+  compute is cheap. The data pipeline fits comfortably in 12 GB VRAM at
+  batch size 128; if VRAM is tighter, `train.py` automatically falls back
+  to batch size 64 with gradient accumulation = 2 so the effective batch
+  is unchanged.
+- **Test**: ~1 minute for a 7-scale + HFlip TTA pass over the 3 669-image
+  test split (14 forward passes per image).
+- **Accuracy**: ~54 % on the official test split, ~77 % on the 3 680-image
+  trainval (which is the full training pool — no held-out val). From-
+  scratch / 30-epoch / no-pretraining is the binding constraint; the
+  cumulative gains over the original recipe came from TTA (+1.14 pp), a
+  stem MaxPool (+5.13 pp), and training on the full trainval (+2.84 pp).
 
 ## Reproducibility
 

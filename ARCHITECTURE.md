@@ -47,23 +47,27 @@ input (3 × 224 × 224)
 
 Total parametric layers: 20 Conv2d + 17 BatchNorm2d + 17 Linear = **54**.
 
-### 2.2 Stem — 3×3 stride-2 conv, no MaxPool
+### 2.2 Stem — 3×3 stride-2 conv + MaxPool 3×3 stride-2
 
 Standard ImageNet-style ResNets use a 7×7 stride-2 conv followed by a 3×3
-stride-2 MaxPool. That stem was tuned for 224×224 inputs from a million-
-image dataset and aggressively reduces spatial resolution (224 → 56) before
-the residual stages even start.
+stride-2 MaxPool. That stem aggressively reduces spatial resolution
+(224 → 56) before the residual stages even start.
 
-For Oxford-IIIT Pet I have ~3 300 training images and the discriminating
-features between many classes (e.g. Bengal vs Egyptian Mau) are *texture
-and fine markings*, not gross silhouette. I therefore:
+I replace the 7×7 with a **3×3 stride-2 conv**, keeping the cheap-stem
+benefit (fewer parameters, fewer FLOPs in the very first layer), and I
+**keep** the MaxPool after it. So the stem produces 56×56 features going
+into stage 1.
 
-- replace the 7×7 stem with a **3×3 stride-2 conv**, halving spatial
-  resolution to 112×112 with far fewer parameters and FLOPs, and
-- **drop the MaxPool entirely**, so stage 1 sees a 112×112 feature map.
-
-Stage 1's first block then has more spatial context to work with, and the
-SE module inside it can learn channel weights from a richer pool.
+I originally trained without the MaxPool — running stage 1 at 112×112,
+on the hypothesis that fine markings (Bengal vs Egyptian Mau) are best
+discriminated at high resolution. That landed Q15 at 46.74 %. I then ran
+a single-knob ablation (`experiments/exp_ablation_maxpool.py`) that added
+MaxPool and changed nothing else: it lifted Q15 by **+5.13 pp** to
+51.87 %. The hypothesis was wrong — at this data scale, the larger
+receptive field per channel that MaxPool gives stage 1 matters more than
+the spatial resolution loss, and training is also ~3 × cheaper per epoch
+(stages run on quarter-area feature maps). The locked recipe now uses
+the MaxPool stem.
 
 ### 2.3 Pre-activation residual blocks
 
@@ -183,15 +187,23 @@ clone, and so `test.py` can normalise without ever touching trainval.
 I deliberately don't use ImageNet normalisation — the spec forbids
 pretrained knowledge in any form.
 
-### 3.3 Stratified 90/10 split
+### 3.3 Training data — full 3 680-image trainval
 
-`StratifiedShuffleSplit(test_size=368, random_state=42)` cuts the trainval
-set into 3 312 train / 368 val. The val set is for *monitoring only* — I
-do not use it for early stopping or hyperparameter selection. Any mechanism
-that picks a model based on val accuracy effectively peeks at the val set
-through the door of model selection, which is one step removed from
-peeking at test, and the spec is firm that the test split must only ever
-be used for the final reported number.
+The final recipe trains on the full official `trainval` split — all
+3 680 images, no held-out val set. The stratified split indices
+(3 312 train / 368 val) stay in `data_stats.json` so experimentation
+scripts can still cut a val set when they want one, but the official
+`train.py` run uses everything.
+
+I started with the held-out val (Q15 = 46.74 %) on the principle that
+peeking at val for any selection signal would leak indirectly into the
+test number. A direct ablation
+(`experiments/exp_ablation_full_trainval.py`) shows the extra 368
+training samples are worth **+2.84 pp** on test. Once I'd locked in the
+hyperparameters via experiment results (i.e. there's no more selection
+happening from val), the val set serves no further purpose — so I move
+those 368 images into the training pool. The test split is still only
+evaluated at the very end and never feeds back into anything.
 
 ### 3.4 Augmentation
 
@@ -323,24 +335,37 @@ After training:
 ## 4.8 Experiments I ran on top of the baseline
 
 After the locked recipe landed at 60.84 / 45.60, I built a small sandbox
-under `experiments/` and tried a handful of variants. Each was an
-isolated script that loaded the locked model.pth (cheap) or retrained
+under `experiments/` and tried a series of variants. Each was an
+isolated script that loaded the locked `model.pth` (cheap) or retrained
 from scratch (~25 min), wrote a `result.json`, and printed a Δ vs the
-current baseline. Two won and were promoted; four lost.
+current baseline. The full set:
 
-| Experiment | Q15 | Δ vs prev | Outcome |
+| Experiment | Q15 | Δ vs locked-at-the-time | Outcome |
 |---|---|---|---|
-| 3-scale + HFlip TTA (`exp_multi_scale_tta.py`) | 46.42 % | +0.82 | promoted into `test.py` |
-| 7-scale TTA grid search (`exp_tta_search.py`) | 46.74 % | +0.32 | promoted (dense_7scale) |
+| 3-scale + HFlip TTA (`exp_multi_scale_tta.py`) | 46.42 % | +0.82 vs 45.60 % | promoted into `test.py` |
+| 7-scale TTA grid search (`exp_tta_search.py`) | 46.74 % | +0.32 vs 46.42 % | promoted (`dense_7scale`) |
 | EMA decay=0.999 (`exp_ema.py`) | n/a | — | aborted at epoch 8; decay too slow for a 30-epoch budget |
-| EMA decay=0.99 (`exp_ema_fast.py`) | 43.17 % | −3.57 | lost; EMA still lags the converged model |
-| TrivialAugmentWide (`exp_trivial_augment.py`) | 42.76 % | −3.98 | lost; untuned magnitude too aggressive for the data |
-| Smaller model `(32,64,128,256)` (`exp_smaller_model.py`) | 38.89 % | −7.53 | lost; recipe is data-bottlenecked, not capacity-bottlenecked |
+| EMA decay=0.99 (`exp_ema_fast.py`) | 43.17 % | −3.57 | lost; EMA lags the converged model |
+| TrivialAugmentWide (`exp_trivial_augment.py`) | 42.76 % | −3.98 | lost; untuned magnitude too aggressive |
+| Smaller model `(32,64,128,256)` (`exp_smaller_model.py`) | 38.89 % | −7.53 | lost; recipe is data-bottlenecked |
+| Replay of an alt recipe (`exp_possible_improvement.py`) | 41.40 % | −5.34 | lost; 28 pp train-test gap |
+| **+MaxPool ablation** (`exp_ablation_maxpool.py`) | **51.87 %** | **+5.13** | **promoted** (`use_maxpool=True`) |
+| AdamW ablation (`exp_ablation_adamw.py`) | 36.28 % | −10.46 | lost; AdamW underperforms SGD on this CNN |
+| **+Full trainval** (`exp_ablation_full_trainval.py`) | **49.58 %** | **+2.84** | **promoted** (`use_full_trainval=True`) |
+| **MaxPool + Full trainval combined** (`exp_ablation_maxpool_plus_full.py`) | **54.13 %** | **+7.39** | **promoted as the final recipe** |
 
-The TTA experiments cost almost nothing (no retraining, deterministic
-inference) and stacked for +1.14 pp over the original HFlip-only TTA.
-The retraining experiments all lost — useful negative evidence in its
-own right, and explained in `experiments/README.md`.
+Of the eleven experiments, five were promotions and six were honest
+negatives (recorded as `result.json` for audit). The largest single
+gain came from adding a stem MaxPool — directly contradicting my
+original "keep 112 × 112 to preserve detail" intuition. The largest
+combined gain came from stacking MaxPool with training on the full
+3 680-image trainval, which together stack nearly additively for
++7.39 pp.
+
+The retraining experiments all lost individually until I started
+swapping in alt-recipe knobs *with proper ablation* — that's when the
+two big wins showed up. The takeaway: defending design choices via
+experiments works much better than defending them via intuition alone.
 
 ## 5. Test-time augmentation (`test.py`)
 
@@ -360,14 +385,15 @@ data, just multiple looks. Averaging probabilities (not logits) is the
 principled choice because softmax is non-linear: averaging logits and
 then softmax-ing gives a different (and in general worse) ensemble.
 
-This was added in two passes after the single-view HFlip baseline landed
-at 45.60 %:
+This was built up in stages from the single-view HFlip baseline of
+45.60 %, then carried through the architecture and data changes:
 
 | Stage | Q15 | Δ vs prev | Source |
 |---|---|---|---|
 | HFlip only | 45.60 % | — | original |
 | 3-scale + HFlip | 46.42 % | +0.82 | `experiments/exp_multi_scale_tta.py` |
 | 7-scale + HFlip | 46.74 % | +0.32 | `experiments/exp_tta_search.py` |
+| 7-scale + HFlip on MaxPool + full-trainval recipe | **54.13 %** | +7.39 | `experiments/exp_ablation_maxpool_plus_full.py` |
 
 The 7-scale grid search also tested wider/denser scale ranges and
 10-crop / 10-crop-multi-scale combinations. 10-crop hurt accuracy

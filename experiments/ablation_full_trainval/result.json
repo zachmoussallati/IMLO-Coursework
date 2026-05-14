@@ -1,0 +1,17 @@
+{
+  "experiment": "ablation_full_trainval",
+  "knob_overrides": {
+    "use_maxpool": false,
+    "optimizer_kind": "sgd",
+    "use_full_trainval": true
+  },
+  "param_count": 11276133,
+  "n_train": 3680,
+  "n_val": 0,
+  "q14_trainval_acc_pct": 64.92,
+  "q15_test_acc_pct_7scale_tta": 49.58,
+  "baseline_test_acc_pct": 46.74,
+  "delta_pp": 2.84,
+  "verdict": "BEATS BASELINE",
+  "notes": "Locked recipe trained on all 3680 trainval images. No validation split. Architecture, optimiser, schedule, augmentation, batch size, mixup, AMP all match locked."
+}

@@ -1,0 +1,17 @@
+{
+  "experiment": "ablation_maxpool_plus_full",
+  "knob_overrides": {
+    "use_maxpool": true,
+    "optimizer_kind": "sgd",
+    "use_full_trainval": true
+  },
+  "param_count": 11276133,
+  "n_train": 3680,
+  "n_val": 0,
+  "q14_trainval_acc_pct": 76.58,
+  "q15_test_acc_pct_7scale_tta": 54.13,
+  "baseline_test_acc_pct": 46.74,
+  "delta_pp": 7.39,
+  "verdict": "BEATS BASELINE",
+  "notes": "Two winning knobs combined: stem MaxPool + full-trainval training (no val split). Architecture, optimiser, schedule, augmentation, batch size, mixup, AMP all match locked."
+}

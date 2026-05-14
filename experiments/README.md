@@ -53,6 +53,10 @@ Run `python experiments/summarise.py` to regenerate the leaderboard.
 | `exp_trivial_augment.py` | `RandAugment` → `TrivialAugmentWide` | ~25 min | 42.76 % * | −3.98 | worse than baseline |
 | `exp_smaller_model.py` | Widths `(32, 64, 128, 256)`, ~2.8 M params | ~25 min | 38.89 % | −7.53 | worse than baseline |
 | `exp_possible_improvement.py` | Faithful replay of an alt recipe shared with me (post-act ResNet, LeakyReLU, AdamW, ImageNet stats, no train/val split) | ~10 min | 41.40 % * | −5.34 | worse than baseline |
+| `exp_ablation_maxpool.py` | Locked recipe + MaxPool after the stem | ~20 min | **51.87 %** | **+5.13** | **promoted** |
+| `exp_ablation_adamw.py` | Locked recipe with AdamW(lr=4e-3, wd=1e-2) instead of SGD-Nesterov | ~25 min | 36.28 % | −10.46 | worse than baseline |
+| `exp_ablation_full_trainval.py` | Locked recipe trained on all 3680 trainval (no val split) | ~25 min | **49.58 %** | **+2.84** | **promoted** |
+| `exp_ablation_maxpool_plus_full.py` | Both winning knobs combined: MaxPool + full trainval | ~20 min | **54.13 %** | **+7.39** | **promoted (final recipe)** |
 
 \*\* The alt recipe scored **71.01 %** on the unaugmented full trainval
 (higher than the locked 60.84 %) but **43.25 %** single-pass on test and

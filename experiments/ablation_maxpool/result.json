@@ -1,0 +1,17 @@
+{
+  "experiment": "ablation_maxpool",
+  "knob_overrides": {
+    "use_maxpool": true,
+    "optimizer_kind": "sgd",
+    "use_full_trainval": false
+  },
+  "param_count": 11276133,
+  "n_train": 3312,
+  "n_val": 368,
+  "q14_trainval_acc_pct": 72.15,
+  "q15_test_acc_pct_7scale_tta": 51.87,
+  "baseline_test_acc_pct": 46.74,
+  "delta_pp": 5.13,
+  "verdict": "BEATS BASELINE",
+  "notes": "Locked recipe with use_maxpool=True. Stage 1 starts at 56x56 instead of 112x112. Everything else matches the locked recipe."
+}

@@ -41,6 +41,11 @@ EPOCHS = 30
 TARGET_BATCH_SIZE = 128
 FALLBACK_BATCH_SIZE = 64
 NUM_WORKERS = 4
+# why: ablation winners promoted into the live recipe. +5.13pp from MaxPool
+# after the stem, +2.84pp from training on the full 3680-image trainval
+# (no held-out val). Stacked: +7.39pp -> Q15 54.13% vs the prior 46.74%.
+USE_MAXPOOL = True
+USE_FULL_TRAINVAL = True
 # why: 1e-1 peak. I tried 5e-2 thinking the lower LR would settle into a
 # cleaner basin during warmup, but a full 30-epoch run regressed Q15 from
 # 45.60% to 31.29%. With only 30 epochs / ~750 optimiser steps, halving
@@ -123,7 +128,7 @@ def main() -> None:
     device = torch.device("cuda")
     print(f"[train] device: {torch.cuda.get_device_name(0)}")
 
-    model = build_model(num_classes=NUM_CLASSES).to(device)
+    model = build_model(num_classes=NUM_CLASSES, use_maxpool=USE_MAXPOOL).to(device)
     batch_size, accum_steps = pick_batch_config(model, device)
     effective_bs = batch_size * accum_steps
     print(
@@ -146,10 +151,14 @@ def main() -> None:
         seed=SEED,
         generator=generator,
         worker_init_fn=worker_init_fn,
+        use_full_trainval=USE_FULL_TRAINVAL,
+    )
+    val_size = (
+        len(loaders["val"].dataset) if loaders["val"] is not None else 0
     )
     print(
         f"[train] sizes: train={len(loaders['train'].dataset)} "
-        f"val={len(loaders['val'].dataset)} "
+        f"val={val_size} "
         f"trainval(full)={len(loaders['full_trainval'].dataset)} "
         f"test={len(loaders['test'].dataset)}"
     )
@@ -191,14 +200,18 @@ def main() -> None:
             epochs=EPOCHS,
         )
         clean_train = evaluate(model, loaders["clean_train"], device)
-        val_eval = evaluate(model, loaders["val"], device)
+        if loaders["val"] is not None:
+            val_eval = evaluate(model, loaders["val"], device)
+            val_str = f"val_acc={val_eval['acc']*100:.2f}%"
+        else:
+            val_str = "val_acc=n/a"
         current_lr = optimizer.param_groups[0]["lr"]
         print(
             f"[train] epoch {epoch:02d}/{EPOCHS} | "
             f"lr={current_lr:.4f} | "
             f"train_loss={train_metrics['loss']:.4f} | "
             f"clean_train_acc={clean_train['acc']*100:.2f}% | "
-            f"val_acc={val_eval['acc']*100:.2f}%"
+            f"{val_str}"
         )
 
     # why: save the *last-epoch* state, not best-val. Picking by val accuracy

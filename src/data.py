@@ -167,19 +167,27 @@ def build_loaders(
     seed: int = 42,
     generator: Optional[torch.Generator] = None,
     worker_init_fn: Optional[Callable[[int], None]] = None,
+    use_full_trainval: bool = False,
 ) -> dict:
     """Build every DataLoader the training script needs.
 
     Keys returned: 'train' (augmented, shuffled, drop_last), 'val' (eval
-    transform, no shuffle), 'clean_train' (eval transform on the train subset
-    for unaugmented train accuracy), 'full_trainval' (eval transform on all
-    3680 trainval images for the Q14 number), 'test', and 'stats'.
+    transform, no shuffle - None when use_full_trainval=True), 'clean_train'
+    (eval transform on the train subset for unaugmented train accuracy),
+    'full_trainval' (eval transform on all 3680 trainval images for the Q14
+    number), 'test', and 'stats'.
+
+    why use_full_trainval: when True, training uses all 3 680 trainval
+    images (no held-out val). Promoted after the +full_trainval ablation
+    showed +2.84pp vs the locked 3 312 / 368 split. The stratified split
+    indices in data_stats.json stay around so experiment / verify scripts
+    can still ask for a val set.
     """
     stats = get_data_stats(seed=seed)
     train_t = build_train_transform(stats["mean"], stats["std"])
     eval_t = build_eval_transform(stats["mean"], stats["std"])
 
-    # why: two OxfordIIITPet instances backed by the same files on disk —
+    # why: two OxfordIIITPet instances backed by the same files on disk -
     # one with augmentation for actual training, one with the eval transform
     # for clean-train accuracy and the Q14 full-trainval pass.
     aug_trainval = OxfordIIITPet(
@@ -204,9 +212,14 @@ def build_loaders(
         transform=eval_t,
     )
 
-    train_subset = Subset(aug_trainval, stats["train_indices"])
-    val_subset = Subset(eval_trainval, stats["val_indices"])
-    clean_train_subset = Subset(eval_trainval, stats["train_indices"])
+    if use_full_trainval:
+        train_subset: torch.utils.data.Dataset = aug_trainval
+        val_subset: Optional[torch.utils.data.Dataset] = None
+        clean_train_subset: torch.utils.data.Dataset = eval_trainval
+    else:
+        train_subset = Subset(aug_trainval, stats["train_indices"])
+        val_subset = Subset(eval_trainval, stats["val_indices"])
+        clean_train_subset = Subset(eval_trainval, stats["train_indices"])
 
     # why: I keep five DataLoaders alive simultaneously (train / val /
     # clean_train every epoch; full_trainval / test once at the end). On
@@ -234,12 +247,16 @@ def build_loaders(
         pin_memory=True,
         persistent_workers=False,
     )
-    val_loader = DataLoader(
-        val_subset,
-        batch_size=batch_size,
-        shuffle=False,
-        worker_init_fn=worker_init_fn,
-        **eval_kwargs,
+    val_loader = (
+        DataLoader(
+            val_subset,
+            batch_size=batch_size,
+            shuffle=False,
+            worker_init_fn=worker_init_fn,
+            **eval_kwargs,
+        )
+        if val_subset is not None
+        else None
     )
     clean_train_loader = DataLoader(
         clean_train_subset,

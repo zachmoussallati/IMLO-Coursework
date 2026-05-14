@@ -1,0 +1,17 @@
+{
+  "experiment": "ablation_adamw",
+  "knob_overrides": {
+    "use_maxpool": false,
+    "optimizer_kind": "adamw",
+    "use_full_trainval": false
+  },
+  "param_count": 11276133,
+  "n_train": 3312,
+  "n_val": 368,
+  "q14_trainval_acc_pct": 50.33,
+  "q15_test_acc_pct_7scale_tta": 36.28,
+  "baseline_test_acc_pct": 46.74,
+  "delta_pp": -10.46,
+  "verdict": "WORSE THAN BASELINE",
+  "notes": "Locked recipe with AdamW(lr=4e-3, wd=1e-2) instead of SGD-Nesterov(lr=0.1, wd=5e-4). OneCycle pct_start stays at 0.17. Architecture, augmentation, batch size, mixup, AMP, train/val split all match the locked recipe."
+}

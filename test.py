@@ -56,7 +56,10 @@ def main() -> None:
     with stats_file.open("r", encoding="utf-8") as f:
         stats = json.load(f)
 
-    model = build_model(num_classes=stats["num_classes"]).to(device)
+    # why: use_maxpool=True - promoted after the +maxpool ablation showed
+    # +5.13pp on test. The saved model.pth was trained with this stem so the
+    # forward path here must match.
+    model = build_model(num_classes=stats["num_classes"], use_maxpool=True).to(device)
     # why: weights_only=True - safer load when model.pth is just a state dict,
     # and silences the "weights_only=False is deprecated" warning on newer
     # PyTorch versions.

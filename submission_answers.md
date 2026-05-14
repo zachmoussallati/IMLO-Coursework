@@ -26,21 +26,26 @@ Where the BatchNorm2d come from: 2 BNs per residual block × 8 blocks (= 16)
 + 1 final BN before the head = 17. Where the Linear come from: 2 FCs per
 SE module × 8 blocks (= 16) + 1 classifier = 17.
 
+The stem MaxPool2d (added in the promotion) has no parameters so it
+doesn't change Q1 / Q5.
+
 ## Q2 — Layer types used
 
 **Answer (comma-separated):**
 
-`Conv2d (×20), BatchNorm2d (×17), Linear (×17), SiLU (×25), Sigmoid (×8), AdaptiveAvgPool2d (×9), Dropout (×1)`
+`Conv2d (×20), BatchNorm2d (×17), Linear (×17), SiLU (×25), Sigmoid (×8), AdaptiveAvgPool2d (×9), MaxPool2d (×1), Dropout (×1)`
 
 I don't list `nn.Identity` explicitly — it's used as the residual shortcut in
 blocks where the input and output shapes already match, so it has no
-parameters and isn't really a layer in any meaningful sense.
+parameters and isn't really a layer in any meaningful sense. `MaxPool2d`
+appears once right after the stem conv (3×3 stride-2 padding-1) — added
+after the +maxpool ablation showed +5.13 pp on test.
 
 ## Q3 — Units / kernels per layer
 
 **Answer (grouped per stage):**
 
-`stem: 64 (3×3 conv); stage 1: 64 channels × 2 PreAct-SE blocks (no projection); stage 2: 128 channels × 2 blocks (1×1 projection 64→128 in the first block); stage 3: 256 channels × 2 blocks (1×1 projection 128→256 in the first block); stage 4: 512 channels × 2 blocks (1×1 projection 256→512 in the first block); SE bottleneck channels per stage: 8, 8, 16, 32; classifier: 37 units`
+`stem: 64 (3×3 stride-2 conv) → MaxPool 3×3 stride-2; stage 1: 64 channels × 2 PreAct-SE blocks (no projection, 56×56 features); stage 2: 128 channels × 2 blocks (1×1 projection 64→128 in the first block, 28×28); stage 3: 256 channels × 2 blocks (1×1 projection 128→256 in the first block, 14×14); stage 4: 512 channels × 2 blocks (1×1 projection 256→512 in the first block, 7×7); SE bottleneck channels per stage: 8, 8, 16, 32; classifier: 37 units`
 
 All 3×3 convs in the residual main path keep their stage's channel count;
 each first block of stages 2–4 also has a 1×1 stride-2 projection conv that
@@ -109,22 +114,25 @@ soft-target CE path is intact — they're disabled by default
 
 ## Q12 — Total images in the training set
 
-**Answer:** `3312`
+**Answer:** `3680`
 
-Stratified 90 % split of the official 3 680-image trainval set
-(`StratifiedShuffleSplit(test_size=368, random_state=42)`).
+I train on the full official `trainval` split. I started with a stratified
+90 / 10 split (3 312 train / 368 val) for monitoring, then promoted to
+training on the whole set after the +full_trainval ablation showed
++2.84 pp on test vs the split-trained baseline. The split indices stay in
+`data_stats.json` so experiments can still cut a held-out val if needed,
+but the official train.py run uses all of trainval.
 
 ## Q13 — Total images in the validation set
 
-**Answer:** `368`
+**Answer:** `0`
 
-The complementary 10 % of trainval. I only use it to *monitor* training —
-no early stopping, no hyperparameter selection — so the test split is never
-indirectly leaked into model selection.
+No held-out validation set in the final recipe (see Q12). The official
+`test` split is the only thing I evaluate the trained model on at the end.
 
 ## Q14 — Accuracy on the official trainval set
 
-**Answer:** `60.84 %`
+**Answer:** `76.58 %`
 
 Evaluated under the eval transform (Resize 256 → CenterCrop 224 → Normalize),
 no augmentation, no TTA, on all 3 680 trainval images. Reported by the
@@ -132,7 +140,7 @@ final block of `train.py`.
 
 ## Q15 — Accuracy on the official test set
 
-**Answer:** `46.74 %`
+**Answer:** `54.13 %`
 
 Evaluated on all 3 669 test images with **7-scale + horizontal-flip TTA**.
 For each test image I build seven eval transforms — `Resize(s)` for
