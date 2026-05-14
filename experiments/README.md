@@ -52,6 +52,21 @@ Run `python experiments/summarise.py` to regenerate the leaderboard.
 | `exp_ema_fast.py` | EMA weights, decay=0.99 | ~25 min | 43.17 % | −3.57 | worse than baseline |
 | `exp_trivial_augment.py` | `RandAugment` → `TrivialAugmentWide` | ~25 min | 42.76 % * | −3.98 | worse than baseline |
 | `exp_smaller_model.py` | Widths `(32, 64, 128, 256)`, ~2.8 M params | ~25 min | 38.89 % | −7.53 | worse than baseline |
+| `exp_possible_improvement.py` | Faithful replay of an alt recipe shared with me (post-act ResNet, LeakyReLU, AdamW, ImageNet stats, no train/val split) | ~10 min | 41.40 % * | −5.34 | worse than baseline |
+
+\*\* The alt recipe scored **71.01 %** on the unaugmented full trainval
+(higher than the locked 60.84 %) but **43.25 %** single-pass on test and
+**41.40 %** with the live 7-scale + HFlip TTA. The "close to 60 %" claim
+that came with this recipe was almost certainly the *training*
+accuracy in its print log (it reaches `train_acc=60.76 %` at epoch 30),
+not test accuracy. The 28 pp train-test gap is a classic small-data
+overfit driven by the lighter augmentation (just HFlip + Rotation +
+ColorJitter), lower label smoothing (0.05), and training on the full
+3 680-image trainval with no val signal. Our 7-scale TTA actively
+*hurts* this model (41.40 % vs 43.25 % single-pass) because the alt
+recipe trains with `Resize((224, 224))` which stretches images to a
+square — TTA's aspect-preserving `Resize(scale) → CenterCrop(224)`
+gives the model inputs it has never seen.
 
 \* TrivialAugment's `result.json` records the HFlip-only Q15 (42.25 %) the
 script measured directly. I followed up by evaluating

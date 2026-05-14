@@ -1,0 +1,11 @@
+{
+  "experiment": "possible_improvement",
+  "param_count": 5047141,
+  "q14_full_trainval_acc_pct": 71.01,
+  "q15_test_acc_pct_single_pass": 43.25,
+  "q15_test_acc_pct_7scale_tta": 41.4,
+  "baseline_test_acc_pct": 46.74,
+  "delta_pp": -5.34,
+  "verdict": "WORSE THAN BASELINE",
+  "notes": "Uses ImageNet normalization stats (vs trainval-computed stats in the locked recipe). Trains on full 3680-image trainval (no val split). Architecture is post-activation ResNet with LeakyReLU, 1 block per stage, no SE. AdamW + OneCycle."
+}
