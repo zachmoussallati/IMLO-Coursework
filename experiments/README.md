@@ -57,6 +57,8 @@ Run `python experiments/summarise.py` to regenerate the leaderboard.
 | `exp_ablation_adamw.py` | Locked recipe with AdamW(lr=4e-3, wd=1e-2) instead of SGD-Nesterov | ~25 min | 36.28 % | −10.46 | worse than baseline |
 | `exp_ablation_full_trainval.py` | Locked recipe trained on all 3680 trainval (no val split) | ~25 min | **49.58 %** | **+2.84** | **promoted** |
 | `exp_ablation_maxpool_plus_full.py` | Both winning knobs combined: MaxPool + full trainval | ~20 min | **54.13 %** | **+7.39** | **promoted (final recipe)** |
+| `exp_ablation_adamw_on_promoted.py` | AdamW(lr=4e-3, wd=1e-2) on the *promoted* recipe (MaxPool + full trainval) | ~20 min | 44.62 % | −9.51 vs 54.13 | lost; AdamW@4e-3 too hot |
+| `exp_ablation_adamw_tune.py` | Tuned AdamW(lr=1e-3, wd=1e-2) on the promoted recipe | ~20 min | 49.14 % | −4.99 vs 54.13 | lost; closer but SGD still 5pp ahead |
 
 \*\* The alt recipe scored **71.01 %** on the unaugmented full trainval
 (higher than the locked 60.84 %) but **43.25 %** single-pass on test and

@@ -1,0 +1,17 @@
+{
+  "experiment": "ablation_adamw_on_promoted",
+  "knob_overrides": {
+    "use_maxpool": true,
+    "optimizer_kind": "adamw",
+    "use_full_trainval": true
+  },
+  "param_count": 11276133,
+  "n_train": 3680,
+  "n_val": 0,
+  "q14_trainval_acc_pct": 65.46,
+  "q15_test_acc_pct_7scale_tta": 44.62,
+  "baseline_test_acc_pct": 54.13,
+  "delta_pp": -9.51,
+  "verdict": "WORSE THAN BASELINE",
+  "notes": "AdamW(lr=4e-3, wd=1e-2) layered on the promoted recipe (MaxPool + full trainval). Re-testing whether AdamW is still worse than SGD-Nesterov on the new architecture / data setup."
+}

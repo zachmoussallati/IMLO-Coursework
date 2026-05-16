@@ -56,6 +56,8 @@ def run_ablation(
     use_maxpool: bool = False,
     optimizer_kind: Literal["sgd", "adamw"] = "sgd",
     use_full_trainval: bool = False,
+    adamw_max_lr: float = MAX_LR_ADAMW,
+    adamw_weight_decay: float = WEIGHT_DECAY_ADAMW,
     baseline_test_pct: float = 46.74,
     notes: str = "",
 ) -> dict:
@@ -144,10 +146,10 @@ def run_ablation(
         sched_max_lr = MAX_LR_SGD
     elif optimizer_kind == "adamw":
         optimizer = optim.AdamW(
-            model.parameters(), lr=MAX_LR_ADAMW / 25,
-            weight_decay=WEIGHT_DECAY_ADAMW,
+            model.parameters(), lr=adamw_max_lr / 25,
+            weight_decay=adamw_weight_decay,
         )
-        sched_max_lr = MAX_LR_ADAMW
+        sched_max_lr = adamw_max_lr
     else:
         raise ValueError(f"unknown optimizer_kind={optimizer_kind!r}")
 

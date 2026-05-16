@@ -1,0 +1,17 @@
+{
+  "experiment": "ablation_adamw_tune_1e3",
+  "knob_overrides": {
+    "use_maxpool": true,
+    "optimizer_kind": "adamw",
+    "use_full_trainval": true
+  },
+  "param_count": 11276133,
+  "n_train": 3680,
+  "n_val": 0,
+  "q14_trainval_acc_pct": 70.16,
+  "q15_test_acc_pct_7scale_tta": 49.14,
+  "baseline_test_acc_pct": 54.13,
+  "delta_pp": -4.99,
+  "verdict": "WORSE THAN BASELINE",
+  "notes": "AdamW with a tuned lower max_lr=1e-3 (vs 4e-3 in the prior AdamW-on-promoted run). Same MaxPool + full-trainval setup."
+}
