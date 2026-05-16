@@ -56,8 +56,11 @@ def run_ablation(
     use_maxpool: bool = False,
     optimizer_kind: Literal["sgd", "adamw"] = "sgd",
     use_full_trainval: bool = False,
+    sgd_max_lr: float = MAX_LR_SGD,
+    sgd_weight_decay: float = WEIGHT_DECAY_SGD,
     adamw_max_lr: float = MAX_LR_ADAMW,
     adamw_weight_decay: float = WEIGHT_DECAY_ADAMW,
+    mix_prob: float = MIX_PROB,
     baseline_test_pct: float = 46.74,
     notes: str = "",
 ) -> dict:
@@ -140,10 +143,10 @@ def run_ablation(
 
     if optimizer_kind == "sgd":
         optimizer = optim.SGD(
-            model.parameters(), lr=MAX_LR_SGD, momentum=MOMENTUM,
-            nesterov=True, weight_decay=WEIGHT_DECAY_SGD,
+            model.parameters(), lr=sgd_max_lr, momentum=MOMENTUM,
+            nesterov=True, weight_decay=sgd_weight_decay,
         )
-        sched_max_lr = MAX_LR_SGD
+        sched_max_lr = sgd_max_lr
     elif optimizer_kind == "adamw":
         optimizer = optim.AdamW(
             model.parameters(), lr=adamw_max_lr / 25,
@@ -170,7 +173,7 @@ def run_ablation(
         m = train_one_epoch(
             model, train_loader, optimizer, scheduler, scaler,
             device=device, num_classes=NUM_CLASSES,
-            mix_prob=MIX_PROB, accum_steps=1,
+            mix_prob=mix_prob, accum_steps=1,
             epoch_idx=epoch, epochs=EPOCHS,
         )
         ct = evaluate(model, clean_train_loader, device)

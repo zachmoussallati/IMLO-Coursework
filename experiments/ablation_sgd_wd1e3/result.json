@@ -1,0 +1,17 @@
+{
+  "experiment": "ablation_sgd_wd1e3",
+  "knob_overrides": {
+    "use_maxpool": true,
+    "optimizer_kind": "sgd",
+    "use_full_trainval": true
+  },
+  "param_count": 11276133,
+  "n_train": 3680,
+  "n_val": 0,
+  "q14_trainval_acc_pct": 76.03,
+  "q15_test_acc_pct_7scale_tta": 56.39,
+  "baseline_test_acc_pct": 54.13,
+  "delta_pp": 2.26,
+  "verdict": "BEATS BASELINE",
+  "notes": "SGD-Nesterov with weight_decay=1e-3 (2x the locked 5e-4). Targeting the 22pp train-test gap on the promoted recipe."
+}
