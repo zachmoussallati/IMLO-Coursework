@@ -17,6 +17,98 @@ from .mixup import maybe_mix, soft_target_cross_entropy
 from .utils import AverageMeter
 
 
+class SWA:
+    """Stochastic Weight Averaging (Izmailov et al., 2018, arXiv:1803.05407).
+
+    Maintains a running average of model weights collected over the tail of
+    training. At eval time the averaged weights typically generalise better
+    than the last-epoch weights because they sit in a flatter region of the
+    loss landscape, and the average smooths out the per-batch oscillations
+    the optimiser produces around its trajectory.
+
+    Usage in a training script:
+        swa = SWA(model)                       # capture snapshot 1
+        for epoch in range(1, epochs+1):
+            ... train ...
+            if epoch >= start_epoch:
+                swa.update(model)              # captures another snapshot
+        swa.recalibrate_bn(model, loader)      # update BN stats on avg weights
+        swa.apply_to(model)                    # swap averaged weights in
+
+    why a hand-rolled SWA rather than torch.optim.swa_utils.AveragedModel:
+    keeps the dependency surface small (just torch primitives) and avoids
+    coupling SWA's lifetime to the optimiser. Equivalent maths.
+    """
+
+    def __init__(self, model: nn.Module) -> None:
+        # why: store params on the same device as the model so the running
+        # mean update is a single device-side add. CPU storage works too but
+        # forces a host-device copy per update, which compounds across 30
+        # epochs.
+        self._avg = {
+            name: param.detach().clone()
+            for name, param in model.state_dict().items()
+            if param.is_floating_point()
+        }
+        # Non-float buffers (e.g. BN num_batches_tracked, int64) are copied
+        # as-is at apply time.
+        self._non_float = {
+            name: param.detach().clone()
+            for name, param in model.state_dict().items()
+            if not param.is_floating_point()
+        }
+        self._n_snapshots = 1  # the initial snapshot from __init__
+
+    def update(self, model: nn.Module) -> None:
+        """Fold a new model snapshot into the running average."""
+        self._n_snapshots += 1
+        for name, param in model.state_dict().items():
+            if param.is_floating_point():
+                # why: incremental mean — avg <- avg + (new - avg) / n.
+                # Numerically stable for any number of snapshots.
+                self._avg[name].add_(
+                    (param.detach() - self._avg[name]) / self._n_snapshots
+                )
+            else:
+                self._non_float[name] = param.detach().clone()
+
+    def apply_to(self, model: nn.Module) -> None:
+        """Copy averaged weights into the model in-place."""
+        sd = dict(self._avg)
+        sd.update(self._non_float)
+        model.load_state_dict(sd, strict=True)
+
+    @torch.no_grad()
+    def recalibrate_bn(
+        self,
+        model: nn.Module,
+        loader,
+        device: torch.device,
+        max_batches: int | None = None,
+    ) -> None:
+        """Recompute BN running stats by feeding train data through the avg weights.
+
+        why: BN's running mean/var were collected from the *original* weight
+        trajectory, not the SWA average. After we swap in the averaged
+        weights those stats can be a poor match for the new activations.
+        Standard fix: reset running stats and do a few forward passes in
+        train mode (which updates the running stats but no gradient).
+        """
+        self.apply_to(model)
+        # Reset running stats on all BN layers.
+        for m in model.modules():
+            if isinstance(m, nn.BatchNorm2d):
+                m.reset_running_stats()
+        model.train()
+        with torch.amp.autocast("cuda"):
+            for i, (images, _) in enumerate(loader):
+                images = images.to(device, non_blocking=True)
+                model(images)
+                if max_batches is not None and i + 1 >= max_batches:
+                    break
+        model.eval()
+
+
 def train_one_epoch(
     model: nn.Module,
     loader,

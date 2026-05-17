@@ -28,6 +28,7 @@ from src.data import (
 )
 from src.model import build_model
 from src.train_loop import (
+    SWA,
     evaluate,
     evaluate_test_with_multiscale_tta,
     train_one_epoch,
@@ -55,6 +56,11 @@ def run_ablation(
     *,
     use_maxpool: bool = False,
     drop_path_rate: float = 0.0,
+    widths: tuple[int, int, int, int] = (64, 128, 256, 512),
+    blocks_per_stage: tuple[int, int, int, int] = (2, 2, 2, 2),
+    block_kind: str = "basic",
+    se_reduction: int = 16,
+    use_blurpool: bool = False,
     optimizer_kind: Literal["sgd", "adamw"] = "sgd",
     use_full_trainval: bool = False,
     sgd_max_lr: float = MAX_LR_SGD,
@@ -65,6 +71,8 @@ def run_ablation(
     random_erasing_p: float = 0.0,
     rand_augment_magnitude: int = 7,
     one_cycle_pct_start: float = ONE_CYCLE_PCT_START,
+    swa_start_epoch: int | None = None,
+    swa_recalibrate_batches: int = 30,
     baseline_test_pct: float = 46.74,
     notes: str = "",
 ) -> dict:
@@ -87,7 +95,12 @@ def run_ablation(
     model = build_model(
         num_classes=NUM_CLASSES,
         use_maxpool=use_maxpool,
+        use_blurpool=use_blurpool,
         drop_path_rate=drop_path_rate,
+        widths=widths,
+        blocks_per_stage=blocks_per_stage,
+        block_kind=block_kind,
+        se_reduction=se_reduction,
     ).to(device)
     param_count = sum(p.numel() for p in model.parameters())
 
@@ -181,6 +194,11 @@ def run_ablation(
         f"use_maxpool={use_maxpool}"
     )
 
+    # why: SWA collects weight snapshots from swa_start_epoch onward and
+    # averages them. Default (None) reproduces the locked behaviour - no
+    # averaging, just the last-epoch weights.
+    swa = None
+
     for epoch in range(1, EPOCHS + 1):
         m = train_one_epoch(
             model, train_loader, optimizer, scheduler, scaler,
@@ -200,6 +218,23 @@ def run_ablation(
             f"lr={lr_now:.4f} | train_loss={m['loss']:.4f} | "
             f"clean_train={ct['acc']*100:.2f}% | {v_str}"
         )
+
+        if swa_start_epoch is not None and epoch >= swa_start_epoch:
+            if swa is None:
+                # First snapshot.
+                swa = SWA(model)
+                print(f"[exp:{name}] SWA: snapshot 1 captured at epoch {epoch}")
+            else:
+                swa.update(model)
+                print(f"[exp:{name}] SWA: snapshot {swa._n_snapshots} captured at epoch {epoch}")
+
+    if swa is not None:
+        print(f"[exp:{name}] SWA: applying averaged weights + BN recalibration ({swa_recalibrate_batches} batches)")
+        swa.recalibrate_bn(
+            model, clean_train_loader, device,
+            max_batches=swa_recalibrate_batches,
+        )
+        # swa.recalibrate_bn already left averaged weights in model + eval mode.
 
     torch.save(model.state_dict(), experiment_dir / "model.pth")
 
