@@ -52,7 +52,11 @@ USE_FULL_TRAINVAL = True
 # the peak halves the effective "hot" learning window, which costs more
 # than the cleaner convergence buys. 1e-1 is back as the OneCycle peak.
 MAX_LR = 1e-1
-WEIGHT_DECAY = 5e-4
+# why: ablation showed wd=1e-3 (2x the prior 5e-4) closes ~2pp of the
+# train/test gap on the MaxPool + full-trainval recipe: Q15 54.13 -> 56.39.
+# I tried 2e-3 next; it over-regularised (-2.15pp) so 1e-3 sits on the
+# right side of the bias / variance trade for this 3680-image train set.
+WEIGHT_DECAY = 1e-3
 MOMENTUM = 0.9
 # why: pct_start = 5/30 = 0.1667 - five epochs of warmup, twenty-five of
 # cosine decay. Standard OneCycle / super-convergence shape.

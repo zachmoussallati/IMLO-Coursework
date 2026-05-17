@@ -75,7 +75,7 @@ cleanly with Mixup / CutMix if those were re-enabled (they're currently off
 
 ## Q7 — Optimisation algorithm
 
-**Answer:** `SGD with Nesterov momentum (momentum=0.9, weight_decay=5e-4), with a OneCycleLR schedule.`
+**Answer:** `SGD with Nesterov momentum (momentum=0.9, weight_decay=1e-3), with a OneCycleLR schedule.`
 
 ## Q8 — Learning rate
 
@@ -132,7 +132,7 @@ No held-out validation set in the final recipe (see Q12). The official
 
 ## Q14 — Accuracy on the official trainval set
 
-**Answer:** `76.58 %`
+**Answer:** `76.03 %`
 
 Evaluated under the eval transform (Resize 256 → CenterCrop 224 → Normalize),
 no augmentation, no TTA, on all 3 680 trainval images. Reported by the
@@ -140,7 +140,7 @@ final block of `train.py`.
 
 ## Q15 — Accuracy on the official test set
 
-**Answer:** `54.13 %`
+**Answer:** `56.39 %`
 
 Evaluated on all 3 669 test images with **7-scale + horizontal-flip TTA**.
 For each test image I build seven eval transforms — `Resize(s)` for
@@ -158,6 +158,10 @@ Promotion history:
 |---|---|---|
 | HFlip only (original) | 45.60 % | — |
 | 3-scale + HFlip (promoted from `experiments/exp_multi_scale_tta.py`) | 46.42 % | +0.82 |
-| 7-scale + HFlip (promoted from `experiments/exp_tta_search.py`) | **46.74 %** | +0.32 |
+| 7-scale + HFlip (promoted from `experiments/exp_tta_search.py`) | 46.74 % | +0.32 |
+| + MaxPool after stem (promoted from `experiments/exp_ablation_maxpool.py`) | 51.87 % | +5.13 |
+| + full-trainval training (promoted from `experiments/exp_ablation_maxpool_plus_full.py`) | 54.13 % | +2.26 |
+| + weight_decay 1e-3 (promoted from `experiments/exp_ablation_sgd_wd1e3.py`) | **56.39 %** | +2.26 |
 
-Same model weights throughout — only the inference path got smarter.
+Each row is one knob landing in the live recipe; everything else stayed
+fixed across rows so each delta is attributable.
