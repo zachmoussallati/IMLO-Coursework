@@ -56,6 +56,33 @@ class SqueezeExcite(nn.Module):
         return feat * gate.view(b, c, 1, 1)
 
 
+class StochasticDepth(nn.Module):
+    """Per-sample stochastic depth (drop-path) applied to a residual branch.
+
+    why: with drop_prob p, each training sample sees the branch output
+    zeroed with probability p (so the block becomes identity for that
+    sample). At eval time it's a no-op. Implementation uses the standard
+    inverse scaling so the expected forward output matches eval mode.
+
+    Reference: Huang et al., 2016, "Deep Networks with Stochastic Depth",
+    arXiv:1603.09382.
+    """
+
+    def __init__(self, drop_prob: float = 0.0) -> None:
+        super().__init__()
+        self.drop_prob = float(drop_prob)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if not self.training or self.drop_prob == 0.0:
+            return x
+        keep_prob = 1.0 - self.drop_prob
+        # why: shape (B, 1, 1, 1) so each sample is dropped independently
+        # but the whole feature map per sample is dropped together.
+        shape = (x.shape[0],) + (1,) * (x.dim() - 1)
+        mask = torch.empty(shape, dtype=x.dtype, device=x.device).bernoulli_(keep_prob)
+        return x.div(keep_prob) * mask
+
+
 class PreActSEBlock(nn.Module):
     """Pre-activation residual block with an SE gate before the residual add.
 
@@ -78,6 +105,7 @@ class PreActSEBlock(nn.Module):
         out_channels: int,
         stride: int = 1,
         se_reduction: int = 16,
+        drop_path_prob: float = 0.0,
     ) -> None:
         super().__init__()
         self.bn_a = nn.BatchNorm2d(in_channels)
@@ -95,6 +123,7 @@ class PreActSEBlock(nn.Module):
             stride=1, padding=1, bias=False,
         )
         self.gate = SqueezeExcite(out_channels, reduction=se_reduction)
+        self.drop_path = StochasticDepth(drop_prob=drop_path_prob)
 
         # why: 1x1 projection only when shape changes (channel count or
         # stride). For "same shape" blocks the shortcut is identity and adds
@@ -114,6 +143,7 @@ class PreActSEBlock(nn.Module):
         out = self.act_b(self.bn_b(out))
         out = self.conv_b(out)
         out = self.gate(out)
+        out = self.drop_path(out)
         return out + residual
 
 
@@ -138,8 +168,14 @@ class PetClassifier(nn.Module):
         se_reduction: int = 16,
         widths: tuple[int, int, int, int] = (64, 128, 256, 512),
         use_maxpool: bool = False,
+        drop_path_rate: float = 0.0,
     ) -> None:
         super().__init__()
+
+        # why: stochastic-depth schedule. drop_path_rate is the linear-max
+        # rate applied to the last block; earlier blocks scale linearly.
+        # Default 0.0 reproduces the locked baseline bit-identically.
+        self.drop_path_rate = drop_path_rate
 
         # why: `widths` is a non-breaking knob added for experimentation.
         # The default (64, 128, 256, 512) reproduces the locked baseline
@@ -178,21 +214,33 @@ class PetClassifier(nn.Module):
         # block sees high-resolution features - breeds in this dataset
         # often differ in fine markings, not gross silhouette.
 
+        # why: linear schedule of per-block drop_path_prob across the 8
+        # residual blocks. Block 0 gets ~0, block 7 gets drop_path_rate.
+        num_blocks_total = 8
+        drop_rates = [
+            drop_path_rate * i / max(num_blocks_total - 1, 1)
+            for i in range(num_blocks_total)
+        ]
+
         self.stage1 = self._make_stage(
             in_channels=w1, out_channels=w1, num_blocks=2,
             first_stride=1, se_reduction=se_reduction,
+            drop_path_probs=drop_rates[0:2],
         )
         self.stage2 = self._make_stage(
             in_channels=w1, out_channels=w2, num_blocks=2,
             first_stride=2, se_reduction=se_reduction,
+            drop_path_probs=drop_rates[2:4],
         )
         self.stage3 = self._make_stage(
             in_channels=w2, out_channels=w3, num_blocks=2,
             first_stride=2, se_reduction=se_reduction,
+            drop_path_probs=drop_rates[4:6],
         )
         self.stage4 = self._make_stage(
             in_channels=w3, out_channels=w4, num_blocks=2,
             first_stride=2, se_reduction=se_reduction,
+            drop_path_probs=drop_rates[6:8],
         )
 
         # why: final BN+SiLU before pooling. Pre-activation blocks end with
@@ -217,8 +265,15 @@ class PetClassifier(nn.Module):
         num_blocks: int,
         first_stride: int,
         se_reduction: int,
+        drop_path_probs: list[float] | None = None,
     ) -> nn.Sequential:
-        """Stack `num_blocks` pre-act SE blocks; first block does any downsample."""
+        """Stack `num_blocks` pre-act SE blocks; first block does any downsample.
+
+        why drop_path_probs: per-block stochastic-depth rates from the
+        top-level linear schedule. None or [0,0,...] preserves baseline.
+        """
+        if drop_path_probs is None:
+            drop_path_probs = [0.0] * num_blocks
         blocks: list[nn.Module] = []
         for block_idx in range(num_blocks):
             block_in = in_channels if block_idx == 0 else out_channels
@@ -229,6 +284,7 @@ class PetClassifier(nn.Module):
                     out_channels=out_channels,
                     stride=block_stride,
                     se_reduction=se_reduction,
+                    drop_path_prob=drop_path_probs[block_idx],
                 )
             )
         return nn.Sequential(*blocks)
@@ -280,6 +336,7 @@ def build_model(
     num_classes: int = 37,
     widths: tuple[int, int, int, int] = (64, 128, 256, 512),
     use_maxpool: bool = False,
+    drop_path_rate: float = 0.0,
 ) -> PetClassifier:
     """Factory used by train.py and test.py - keeps the construction in one place.
 
@@ -295,4 +352,5 @@ def build_model(
         num_classes=num_classes,
         widths=widths,
         use_maxpool=use_maxpool,
+        drop_path_rate=drop_path_rate,
     )

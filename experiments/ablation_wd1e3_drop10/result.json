@@ -1,0 +1,17 @@
+{
+  "experiment": "ablation_wd1e3_drop10",
+  "knob_overrides": {
+    "use_maxpool": true,
+    "optimizer_kind": "sgd",
+    "use_full_trainval": true
+  },
+  "param_count": 11276133,
+  "n_train": 3680,
+  "n_val": 0,
+  "q14_trainval_acc_pct": 69.05,
+  "q15_test_acc_pct_7scale_tta": 48.95,
+  "baseline_test_acc_pct": 56.39,
+  "delta_pp": -7.44,
+  "verdict": "WORSE THAN BASELINE",
+  "notes": "wd=1e-3 + linear stochastic depth, max drop rate 0.1."
+}

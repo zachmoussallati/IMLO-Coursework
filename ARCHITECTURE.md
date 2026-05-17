@@ -275,9 +275,13 @@ cross-entropy so it composes with mixup / CutMix without special cases.
 ### 4.2 Optimiser and schedule
 
 - **SGD with Nesterov momentum**: `lr=0.1`, `momentum=0.9`,
-  `weight_decay=5e-4`. SGD with momentum tends to generalise better than
+  `weight_decay=1e-3`. SGD with momentum tends to generalise better than
   AdamW on CNN image classifiers — Wilson et al. 2017's empirical
-  observation has held up reliably in this regime.
+  observation has held up reliably in this regime. The weight-decay
+  setting moved 5e-4 → 1e-3 after `exp_ablation_sgd_wd1e3.py` showed
+  +2.26 pp on Q15 vs the prior recipe (54.13 → 56.39); a follow-up
+  doubling to 2e-3 regressed −2.15 pp, so 1e-3 is the bias / variance
+  sweet spot for this 3 680-image train set.
 - **OneCycleLR** (Smith & Topin 2018 — *Super-Convergence*): `max_lr=0.1`,
   `pct_start=0.17` (≈ 5 epoch warmup of 30), cosine annealing. Stepped
   per *optimiser step* so it works correctly with gradient accumulation.
@@ -352,15 +356,33 @@ current baseline. The full set:
 | **+MaxPool ablation** (`exp_ablation_maxpool.py`) | **51.87 %** | **+5.13** | **promoted** (`use_maxpool=True`) |
 | AdamW ablation (`exp_ablation_adamw.py`) | 36.28 % | −10.46 | lost; AdamW underperforms SGD on this CNN |
 | **+Full trainval** (`exp_ablation_full_trainval.py`) | **49.58 %** | **+2.84** | **promoted** (`use_full_trainval=True`) |
-| **MaxPool + Full trainval combined** (`exp_ablation_maxpool_plus_full.py`) | **54.13 %** | **+7.39** | **promoted as the final recipe** |
+| **MaxPool + Full trainval combined** (`exp_ablation_maxpool_plus_full.py`) | **54.13 %** | **+7.39** | **promoted** |
+| AdamW retest on promoted recipe (`exp_ablation_adamw_on_promoted.py`) | 44.62 % | −9.51 vs 54.13 % | lost; SGD still wins |
+| AdamW with lower max_lr (`exp_ablation_adamw_tune.py`) | 49.14 % | −4.99 vs 54.13 % | lost; AdamW lift never materialises |
+| **weight_decay 1e-3** (`exp_ablation_sgd_wd1e3.py`) | **56.39 %** | **+2.26 vs 54.13 %** | **promoted as the final recipe** |
+| weight_decay 2e-3 (`exp_ablation_sgd_wd2e3.py`) | 54.24 % | −2.15 vs 56.39 % | lost; over-regularised |
+| wd 1e-3 + mixup_p=0.25 (`exp_ablation_mixup25.py`) | 53.15 % | −0.98 vs 56.39 % | lost; data reg compounds badly |
+| wd 1e-3 + RandomErasing(p=0.25) (`exp_ablation_wd1e3_re25.py`) | 53.50 % | −2.89 vs 56.39 % | lost; same pattern |
+| wd 1e-3 + RandAugment magnitude 9 (`exp_ablation_wd1e3_ra9.py`) | 55.16 % | −1.23 vs 56.39 % | lost; closer but still negative |
+| wd 1e-3 + stochastic depth 0.1 (`exp_ablation_wd1e3_drop10.py`) | 48.95 % | −7.44 vs 56.39 % | lost; arch reg too aggressive at 30 epochs |
+| wd 1e-3 + OneCycle pct_start=0.25 (`exp_ablation_wd1e3_pct25.py`) | 55.71 % | −0.68 vs 56.39 % | lost; closest of all but still negative |
+| AdamW + wd 1e-3 (`exp_ablation_adamw_wd1e3.py`) | 48.68 % | −7.71 vs 56.39 % | lost; AdamW is structurally worse here even with matched wd |
 
-Of the eleven experiments, five were promotions and six were honest
+Of the nineteen experiments, six were promotions and thirteen were honest
 negatives (recorded as `result.json` for audit). The largest single
 gain came from adding a stem MaxPool — directly contradicting my
 original "keep 112 × 112 to preserve detail" intuition. The largest
 combined gain came from stacking MaxPool with training on the full
-3 680-image trainval, which together stack nearly additively for
-+7.39 pp.
+3 680-image trainval (+7.39 pp), and then a +2.26 pp from doubling the
+SGD weight decay to 1e-3.
+
+The post-56.39 % search-area is consistently negative — every additional
+regulariser I tried (mixup, RandomErasing, stronger RandAugment,
+stochastic depth, heavier weight decay) regressed Q15, as did a longer
+LR warmup. The interpretation is that the recipe is sitting close to a
+local optimum for the bias / variance trade at 30 epochs and 3 680
+images; further gains likely require either a wholly different
+architecture or more training budget than the spec allows.
 
 The retraining experiments all lost individually until I started
 swapping in alt-recipe knobs *with proper ablation* — that's when the
@@ -393,7 +415,8 @@ This was built up in stages from the single-view HFlip baseline of
 | HFlip only | 45.60 % | — | original |
 | 3-scale + HFlip | 46.42 % | +0.82 | `experiments/exp_multi_scale_tta.py` |
 | 7-scale + HFlip | 46.74 % | +0.32 | `experiments/exp_tta_search.py` |
-| 7-scale + HFlip on MaxPool + full-trainval recipe | **54.13 %** | +7.39 | `experiments/exp_ablation_maxpool_plus_full.py` |
+| 7-scale + HFlip on MaxPool + full-trainval recipe | 54.13 % | +7.39 | `experiments/exp_ablation_maxpool_plus_full.py` |
+| 7-scale + HFlip on MaxPool + full-trainval + wd 1e-3 | **56.39 %** | +2.26 | `experiments/exp_ablation_sgd_wd1e3.py` |
 
 The 7-scale grid search also tested wider/denser scale ranges and
 10-crop / 10-crop-multi-scale combinations. 10-crop hurt accuracy
@@ -449,12 +472,14 @@ The spec's ±3 % margin is comfortably met on re-runs of the full pipeline.
   a percent in either direction.
 - **Regularisation budget**. After the initial heavy stack failed (see
   §3.4), the recipe is intentionally minimal: RandomResizedCrop, HFlip,
-  RandAugment(magnitude=7), label smoothing 0.1, weight decay 5e-4,
-  dropout 0.2. If a future run with more compute shows the model clearly
-  overfitting (clean-train ≫ val), I'd add things back in this order:
-  RandomErasing(p=0.25), then ColorJitter, then Mixup at α=0.2 with
-  `MIX_PROB = 0.25`. The soft-target loss path already supports all of
-  these, so the change is one constant per regulariser.
+  RandAugment(magnitude=7), label smoothing 0.1, weight decay 1e-3,
+  dropout 0.2. I ran six follow-up ablations stacking extra
+  regularisers on this set (Mixup p=0.25, RandomErasing p=0.25,
+  RandAugment magnitude 9, stochastic depth 0.1, weight decay 2e-3,
+  OneCycle pct_start 0.25) and every single one regressed Q15. The
+  recipe is at a local optimum for the 30-epoch / 3 680-image budget;
+  pushing past it likely requires either more training budget or
+  a fundamentally different architecture rather than another knob flip.
 - **Determinism cost**: `cudnn.deterministic = True` costs ~10–20 % of
   per-step throughput. Worth it for the spec's reproducibility margin.
 
