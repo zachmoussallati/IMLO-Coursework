@@ -54,6 +54,7 @@ def run_ablation(
     name: str,
     *,
     use_maxpool: bool = False,
+    drop_path_rate: float = 0.0,
     optimizer_kind: Literal["sgd", "adamw"] = "sgd",
     use_full_trainval: bool = False,
     sgd_max_lr: float = MAX_LR_SGD,
@@ -61,6 +62,9 @@ def run_ablation(
     adamw_max_lr: float = MAX_LR_ADAMW,
     adamw_weight_decay: float = WEIGHT_DECAY_ADAMW,
     mix_prob: float = MIX_PROB,
+    random_erasing_p: float = 0.0,
+    rand_augment_magnitude: int = 7,
+    one_cycle_pct_start: float = ONE_CYCLE_PCT_START,
     baseline_test_pct: float = 46.74,
     notes: str = "",
 ) -> dict:
@@ -80,7 +84,11 @@ def run_ablation(
 
     # Model init seed.
     seed_all(SEED)
-    model = build_model(num_classes=NUM_CLASSES, use_maxpool=use_maxpool).to(device)
+    model = build_model(
+        num_classes=NUM_CLASSES,
+        use_maxpool=use_maxpool,
+        drop_path_rate=drop_path_rate,
+    ).to(device)
     param_count = sum(p.numel() for p in model.parameters())
 
     # Re-seed for the training loop (matches the locked-recipe convention).
@@ -88,7 +96,11 @@ def run_ablation(
     worker_init = make_worker_init(SEED)
 
     stats = get_data_stats(seed=SEED)
-    train_t = build_train_transform(stats["mean"], stats["std"])
+    train_t = build_train_transform(
+        stats["mean"], stats["std"],
+        random_erasing_p=random_erasing_p,
+        rand_augment_magnitude=rand_augment_magnitude,
+    )
     eval_t = build_eval_transform(stats["mean"], stats["std"])
 
     aug_trainval = OxfordIIITPet(
@@ -159,7 +171,7 @@ def run_ablation(
     total_steps = len(train_loader) * EPOCHS
     scheduler = optim.lr_scheduler.OneCycleLR(
         optimizer, max_lr=sched_max_lr, total_steps=total_steps,
-        pct_start=ONE_CYCLE_PCT_START, anneal_strategy="cos",
+        pct_start=one_cycle_pct_start, anneal_strategy="cos",
     )
     scaler = torch.amp.GradScaler("cuda")
 

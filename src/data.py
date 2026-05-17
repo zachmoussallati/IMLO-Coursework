@@ -116,7 +116,12 @@ def get_data_stats(seed: int = 42) -> dict:
     return stats
 
 
-def build_train_transform(mean: list[float], std: list[float]) -> T.Compose:
+def build_train_transform(
+    mean: list[float],
+    std: list[float],
+    random_erasing_p: float = 0.0,
+    rand_augment_magnitude: int = 7,
+) -> T.Compose:
     """Train augmentation: spatial crop + flip + a moderate RandAugment.
 
     why: I started with a much heavier stack (RandAugment magnitude 9 +
@@ -142,10 +147,16 @@ def build_train_transform(mean: list[float], std: list[float]) -> T.Compose:
             # result regressed (Q15 45.60% -> 31.29% on a full 30-epoch run);
             # at this short training horizon the extra noise compounds with
             # OneCycle's already-tight schedule, so I leave it off.
-            T.RandAugment(num_ops=2, magnitude=7),
+            T.RandAugment(num_ops=2, magnitude=rand_augment_magnitude),
             T.ToTensor(),
             T.Normalize(mean, std),
         ]
+        + (
+            # why: optional RandomErasing on the normalized tensor, added
+            # via experiment harness override. Default 0.0 (off) preserves
+            # the locked behaviour bit-identically.
+            [T.RandomErasing(p=random_erasing_p)] if random_erasing_p > 0.0 else []
+        )
     )
 
 

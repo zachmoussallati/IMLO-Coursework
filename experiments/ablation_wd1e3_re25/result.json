@@ -1,0 +1,17 @@
+{
+  "experiment": "ablation_wd1e3_re25",
+  "knob_overrides": {
+    "use_maxpool": true,
+    "optimizer_kind": "sgd",
+    "use_full_trainval": true
+  },
+  "param_count": 11276133,
+  "n_train": 3680,
+  "n_val": 0,
+  "q14_trainval_acc_pct": 72.5,
+  "q15_test_acc_pct_7scale_tta": 53.5,
+  "baseline_test_acc_pct": 56.39,
+  "delta_pp": -2.89,
+  "verdict": "WORSE THAN BASELINE",
+  "notes": "Stacking wd=1e-3 winner with RandomErasing(p=0.25)."
+}

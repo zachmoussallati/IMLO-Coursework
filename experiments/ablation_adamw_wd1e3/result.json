@@ -1,0 +1,17 @@
+{
+  "experiment": "ablation_adamw_wd1e3",
+  "knob_overrides": {
+    "use_maxpool": true,
+    "optimizer_kind": "adamw",
+    "use_full_trainval": true
+  },
+  "param_count": 11276133,
+  "n_train": 3680,
+  "n_val": 0,
+  "q14_trainval_acc_pct": 70.27,
+  "q15_test_acc_pct_7scale_tta": 48.68,
+  "baseline_test_acc_pct": 56.39,
+  "delta_pp": -7.71,
+  "verdict": "WORSE THAN BASELINE",
+  "notes": "AdamW with max_lr=1e-3, wd=1e-3 (matching SGD's wd winner)."
+}

@@ -1,0 +1,17 @@
+{
+  "experiment": "ablation_wd1e3_mixup25",
+  "knob_overrides": {
+    "use_maxpool": true,
+    "optimizer_kind": "sgd",
+    "use_full_trainval": true
+  },
+  "param_count": 11276133,
+  "n_train": 3680,
+  "n_val": 0,
+  "q14_trainval_acc_pct": 73.78,
+  "q15_test_acc_pct_7scale_tta": 53.15,
+  "baseline_test_acc_pct": 54.13,
+  "delta_pp": -0.98,
+  "verdict": "WORSE THAN BASELINE",
+  "notes": "Stacking the wd=1e-3 winner with mix_prob=0.25. Both target the train-test gap; hypothesis is they compound (or at least don't cancel) and push past 56.39%."
+}
