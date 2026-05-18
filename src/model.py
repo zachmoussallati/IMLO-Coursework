@@ -311,6 +311,8 @@ class PetClassifier(nn.Module):
         widths: tuple[int, int, int, int] = (64, 128, 256, 512),
         blocks_per_stage: tuple[int, int, int, int] = (2, 2, 2, 2),
         block_kind: str = "basic",
+        head_kind: str = "linear",
+        head_hidden: int | None = None,
         use_maxpool: bool = False,
         use_blurpool: bool = False,
         drop_path_rate: float = 0.0,
@@ -436,7 +438,25 @@ class PetClassifier(nn.Module):
         # interacts poorly with BN; this much complements weight decay
         # without hurting convergence in 30 epochs.
         self.head_dropout = nn.Dropout(p=head_dropout)
-        self.classifier = nn.Linear(w4, num_classes)
+        # why: head_kind = "linear" is the locked behaviour (single Linear
+        # projection from pooled features to 37 classes). "mlp" adds a
+        # Linear(w4, h) -> BatchNorm1d(h) -> SiLU intermediate layer
+        # before the final classifier. Pre-classifier BN often helps when
+        # the pooled features are high-dimensional and noisy.
+        if head_kind == "linear":
+            self.classifier: nn.Module = nn.Linear(w4, num_classes)
+        elif head_kind == "mlp":
+            hidden = head_hidden if head_hidden is not None else w4 // 2
+            self.classifier = nn.Sequential(
+                nn.Linear(w4, hidden, bias=False),
+                nn.BatchNorm1d(hidden),
+                nn.SiLU(inplace=True),
+                nn.Linear(hidden, num_classes),
+            )
+        else:
+            raise ValueError(
+                f"head_kind={head_kind!r} not in {{'linear','mlp'}}"
+            )
 
         self._init_weights()
 
@@ -529,6 +549,8 @@ def build_model(
     widths: tuple[int, int, int, int] = (64, 128, 256, 512),
     blocks_per_stage: tuple[int, int, int, int] = (2, 2, 2, 2),
     block_kind: str = "basic",
+    head_kind: str = "linear",
+    head_hidden: int | None = None,
     se_reduction: int = 16,
     use_maxpool: bool = False,
     use_blurpool: bool = False,
@@ -553,6 +575,8 @@ def build_model(
         widths=widths,
         blocks_per_stage=blocks_per_stage,
         block_kind=block_kind,
+        head_kind=head_kind,
+        head_hidden=head_hidden,
         se_reduction=se_reduction,
         use_maxpool=use_maxpool,
         use_blurpool=use_blurpool,

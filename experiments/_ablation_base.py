@@ -59,6 +59,8 @@ def run_ablation(
     widths: tuple[int, int, int, int] = (64, 128, 256, 512),
     blocks_per_stage: tuple[int, int, int, int] = (2, 2, 2, 2),
     block_kind: str = "basic",
+    head_kind: str = "linear",
+    head_hidden: int | None = None,
     se_reduction: int = 16,
     use_blurpool: bool = False,
     optimizer_kind: Literal["sgd", "adamw"] = "sgd",
@@ -100,6 +102,8 @@ def run_ablation(
         widths=widths,
         blocks_per_stage=blocks_per_stage,
         block_kind=block_kind,
+        head_kind=head_kind,
+        head_hidden=head_hidden,
         se_reduction=se_reduction,
     ).to(device)
     param_count = sum(p.numel() for p in model.parameters())
