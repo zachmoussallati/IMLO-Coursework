@@ -1,0 +1,116 @@
+{
+  "experiment": "5crop_tta_refinement",
+  "baseline_test_acc_pct": 71.25,
+  "results": {
+    "baseline_7": {
+      "scales": [
+        208,
+        224,
+        240,
+        256,
+        272,
+        288,
+        304
+      ],
+      "probs_acc_pct": 71.2456,
+      "logits_acc_pct": 69.6102,
+      "probs_delta_pp": -0.0044,
+      "logits_delta_pp": -1.6398
+    },
+    "wider_9": {
+      "scales": [
+        192,
+        208,
+        224,
+        240,
+        256,
+        272,
+        288,
+        304,
+        320
+      ],
+      "probs_acc_pct": 71.0275,
+      "logits_acc_pct": 69.3377,
+      "probs_delta_pp": -0.2225,
+      "logits_delta_pp": -1.9123
+    },
+    "denser_9": {
+      "scales": [
+        208,
+        216,
+        224,
+        232,
+        240,
+        256,
+        272,
+        288,
+        304
+      ],
+      "probs_acc_pct": 71.1638,
+      "logits_acc_pct": 69.3377,
+      "probs_delta_pp": -0.0862,
+      "logits_delta_pp": -1.9123
+    },
+    "peak_7": {
+      "scales": [
+        216,
+        224,
+        232,
+        240,
+        248,
+        256,
+        272
+      ],
+      "probs_acc_pct": 71.1366,
+      "logits_acc_pct": 69.7193,
+      "probs_delta_pp": -0.1134,
+      "logits_delta_pp": -1.5307
+    },
+    "tight_5": {
+      "scales": [
+        216,
+        232,
+        240,
+        248,
+        256
+      ],
+      "probs_acc_pct": 70.5914,
+      "logits_acc_pct": 69.6648,
+      "probs_delta_pp": -0.6586,
+      "logits_delta_pp": -1.5852
+    },
+    "expand_11": {
+      "scales": [
+        192,
+        208,
+        216,
+        224,
+        232,
+        240,
+        256,
+        272,
+        288,
+        304,
+        320
+      ],
+      "probs_acc_pct": 70.8095,
+      "logits_acc_pct": 69.0651,
+      "probs_delta_pp": -0.4405,
+      "logits_delta_pp": -2.1849
+    },
+    "centered_5": {
+      "scales": [
+        224,
+        240,
+        256,
+        272,
+        288
+      ],
+      "probs_acc_pct": 70.8095,
+      "logits_acc_pct": 69.1742,
+      "probs_delta_pp": -0.4405,
+      "logits_delta_pp": -2.0758
+    }
+  },
+  "verdict": "no win > 0.30pp margin; keep locked 7-scale 5-crop"
+}

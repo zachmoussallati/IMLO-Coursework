@@ -1,0 +1,8 @@
+{
+  "experiment": "4crop_tta",
+  "baseline_test_acc_pct": 70.26,
+  "centre_only_test_acc_pct": 70.4552,
+  "five_crop_test_acc_pct": 71.2456,
+  "delta_five_crop_pp": 0.9856,
+  "verdict": "PROMOTE 5-crop: +0.99pp"
+}

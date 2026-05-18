@@ -1,0 +1,17 @@
+{
+  "experiment": "blurpool_mlp_head",
+  "knob_overrides": {
+    "use_maxpool": true,
+    "optimizer_kind": "sgd",
+    "use_full_trainval": true
+  },
+  "param_count": 41794349,
+  "n_train": 3680,
+  "n_val": 0,
+  "q14_trainval_acc_pct": 88.99,
+  "q15_test_acc_pct_7scale_tta": 66.91,
+  "baseline_test_acc_pct": 70.26,
+  "delta_pp": -3.35,
+  "verdict": "WORSE THAN BASELINE",
+  "notes": "BlurPool + ResNet-101 + 2-layer MLP head (Linear-BN-SiLU-Linear), hidden=256."
+}
