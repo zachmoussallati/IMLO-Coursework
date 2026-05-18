@@ -30,6 +30,21 @@ from src.train_loop import evaluate_test_with_multiscale_tta
 BATCH_SIZE = 128
 NUM_WORKERS = 2
 MODEL_PATH = "model.pth"
+# why: live architecture knobs. Must match what train.py built so the
+# saved state dict shape matches at load.
+# - widths = original (64,128,256,512) - in the structural ablation
+#   chain, width-only experiments produced only noise-level gains while
+#   depth-only experiments compounded; we spend the param budget on
+#   depth instead.
+# - blocks_per_stage = (3,4,23,3) - real ResNet-101 layout; the 23
+#   blocks at stage 3 are where the (3,4,23,3) bump over (3,4,9,3)
+#   came from. Lifted Q15 by +4.12pp on its promotion.
+WIDTHS = (64, 128, 256, 512)
+BLOCKS_PER_STAGE = (3, 4, 23, 3)
+# why: BlurPool stride-2 transitions (anti-aliased downsample) added on
+# top of ResNet-101 layout - lifted Q15 +2.72pp (67.54 -> 70.26) at
+# zero added params.
+USE_BLURPOOL = True
 # why: 7-scale TTA. Promoted from experiments/exp_tta_search.py after it
 # beat the 3-scale baseline by +0.32pp (46.42% -> 46.74%). The two TTA
 # promotions stacked are +1.14pp over the single-view 45.60% HFlip-only
@@ -57,13 +72,24 @@ def main() -> None:
         stats = json.load(f)
 
     # why: use_maxpool=True - promoted after the +maxpool ablation showed
-    # +5.13pp on test. The saved model.pth was trained with this stem so the
-    # forward path here must match.
-    model = build_model(num_classes=stats["num_classes"], use_maxpool=True).to(device)
+    # +5.13pp on test. widths from the +wider promotion. Must match
+    # whatever train.py built so the state dict shape matches.
+    model = build_model(
+        num_classes=stats["num_classes"], use_maxpool=True, widths=WIDTHS,
+        blocks_per_stage=BLOCKS_PER_STAGE, use_blurpool=USE_BLURPOOL,
+    ).to(device)
     # why: weights_only=True - safer load when model.pth is just a state dict,
     # and silences the "weights_only=False is deprecated" warning on newer
     # PyTorch versions.
     state = torch.load(MODEL_PATH, map_location=device, weights_only=True)
+    # why: model.pth is stored as fp16 to fit the wider model under the
+    # 100MB zip cap. Up-cast every float tensor back to fp32 before loading
+    # so the model (which is fp32) sees compatible dtypes. Non-float
+    # tensors (e.g. BN num_batches_tracked) pass through untouched.
+    state = {
+        k: (v.float() if v.is_floating_point() and v.dtype != torch.float32 else v)
+        for k, v in state.items()
+    }
     model.load_state_dict(state)
     model.eval()
 

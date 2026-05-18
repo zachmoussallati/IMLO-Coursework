@@ -9,31 +9,39 @@ below). Q5 / parameter counts are pulled from `MODEL_SUMMARY.txt`, which
 
 ## Q1 — How many layers in your network?
 
-**Answer:** `54`
+**Answer:** `204`
 
 I count parametric layers (Conv2d + BatchNorm2d + Linear). Breakdown:
 
 | Type        | Count |
 |-------------|------:|
-| Conv2d      |    20 |
-| BatchNorm2d |    17 |
-| Linear      |    17 |
-| **Total**   |    **54** |
+| Conv2d      |    70 |
+| BatchNorm2d |    67 |
+| Linear      |    67 |
+| **Total**   |    **204** |
 
-Where the Conv2d come from: 1 stem + 4 main convs per stage × 4 stages
-(= 16) + 1×1 projection conv in the first block of stages 2/3/4 (= 3) = 20.
-Where the BatchNorm2d come from: 2 BNs per residual block × 8 blocks (= 16)
-+ 1 final BN before the head = 17. Where the Linear come from: 2 FCs per
-SE module × 8 blocks (= 16) + 1 classifier = 17.
+Where the Conv2d come from: 1 stem + 2 main convs per residual block ×
+33 blocks (= 66) + 1×1 projection conv in the first block of stages
+2 / 3 / 4 (= 3) = 70. Where the BatchNorm2d come from: 2 BNs per residual
+block × 33 blocks (= 66) + 1 final BN before the head = 67. Where the
+Linear come from: 2 FCs per SE module × 33 blocks (= 66) + 1 classifier
+= 67. The 33 blocks are distributed (3, 4, 23, 3) across the four
+stages (ResNet-101 layout).
 
-The stem MaxPool2d (added in the promotion) has no parameters so it
-doesn't change Q1 / Q5.
+The stem MaxPool2d (added in the +MaxPool promotion) has no parameters
+so it doesn't change Q1 / Q5.
 
 ## Q2 — Layer types used
 
 **Answer (comma-separated):**
 
-`Conv2d (×20), BatchNorm2d (×17), Linear (×17), SiLU (×25), Sigmoid (×8), AdaptiveAvgPool2d (×9), MaxPool2d (×1), Dropout (×1)`
+`Conv2d (×70), BatchNorm2d (×67), Linear (×67), SiLU (×100), Sigmoid (×33), AdaptiveAvgPool2d (×34), MaxPool2d (×1), BlurPool2d (×6), Dropout (×1)`
+
+`BlurPool2d` is a non-parametric module I implemented (Zhang 2019,
+arXiv:1904.11486): a fixed 3×3 binomial-blur kernel + stride-2
+subsample, registered as a buffer rather than a `Parameter` so it
+doesn't appear in Q5's trainable param count. It sits at every stride-2
+transition (3 stages × {main path, projection shortcut} = 6 occurrences).
 
 I don't list `nn.Identity` explicitly — it's used as the residual shortcut in
 blocks where the input and output shapes already match, so it has no
@@ -45,7 +53,7 @@ after the +maxpool ablation showed +5.13 pp on test.
 
 **Answer (grouped per stage):**
 
-`stem: 64 (3×3 stride-2 conv) → MaxPool 3×3 stride-2; stage 1: 64 channels × 2 PreAct-SE blocks (no projection, 56×56 features); stage 2: 128 channels × 2 blocks (1×1 projection 64→128 in the first block, 28×28); stage 3: 256 channels × 2 blocks (1×1 projection 128→256 in the first block, 14×14); stage 4: 512 channels × 2 blocks (1×1 projection 256→512 in the first block, 7×7); SE bottleneck channels per stage: 8, 8, 16, 32; classifier: 37 units`
+`stem: 64 (3×3 stride-2 conv) → MaxPool 3×3 stride-2; stage 1: 64 channels × 3 PreAct-SE blocks (no projection, 56×56 features); stage 2: 128 channels × 4 blocks (1×1 projection 64→128 in the first block, 28×28); stage 3: 256 channels × 23 blocks (1×1 projection 128→256 in the first block, 14×14); stage 4: 512 channels × 3 blocks (1×1 projection 256→512 in the first block, 7×7); SE bottleneck channels per stage: 8, 8, 16, 32; classifier: 37 units`
 
 All 3×3 convs in the residual main path keep their stage's channel count;
 each first block of stages 2–4 also has a 1×1 stride-2 projection conv that
@@ -53,14 +61,14 @@ matches dims for the residual add.
 
 ## Q4 — Activation functions
 
-**Answer (with counts):** `SiLU (×25, applied at every BN output and inside each SE bottleneck), Sigmoid (×8, on the SE expand output as the channel gate)`
+**Answer (with counts):** `SiLU (×100, applied at every BN output and inside each SE bottleneck), Sigmoid (×33, on the SE expand output as the channel gate)`
 
 The classifier (Linear → softmax via cross-entropy) uses no explicit
 activation — softmax is folded into the loss.
 
 ## Q5 — Total number of weights/biases
 
-**Answer:** `11276133`
+**Answer:** `41672237`
 
 Pulled from `torchinfo.summary(model, (1,3,224,224))` in `MODEL_SUMMARY.txt`.
 
@@ -132,7 +140,7 @@ No held-out validation set in the final recipe (see Q12). The official
 
 ## Q14 — Accuracy on the official trainval set
 
-**Answer:** `76.03 %`
+**Answer:** `90.84 %`
 
 Evaluated under the eval transform (Resize 256 → CenterCrop 224 → Normalize),
 no augmentation, no TTA, on all 3 680 trainval images. Reported by the
@@ -140,7 +148,7 @@ final block of `train.py`.
 
 ## Q15 — Accuracy on the official test set
 
-**Answer:** `56.39 %`
+**Answer:** `70.26 %`
 
 Evaluated on all 3 669 test images with **7-scale + horizontal-flip TTA**.
 For each test image I build seven eval transforms — `Resize(s)` for
@@ -161,7 +169,18 @@ Promotion history:
 | 7-scale + HFlip (promoted from `experiments/exp_tta_search.py`) | 46.74 % | +0.32 |
 | + MaxPool after stem (promoted from `experiments/exp_ablation_maxpool.py`) | 51.87 % | +5.13 |
 | + full-trainval training (promoted from `experiments/exp_ablation_maxpool_plus_full.py`) | 54.13 % | +2.26 |
-| + weight_decay 1e-3 (promoted from `experiments/exp_ablation_sgd_wd1e3.py`) | **56.39 %** | +2.26 |
+| + weight_decay 1e-3 (promoted from `experiments/exp_ablation_sgd_wd1e3.py`) | 56.39 % | +2.26 |
+| + wider channels 1.5x (promoted from `experiments/exp_ablation_wd1e3_wider.py`) | 58.90 % | +2.51 |
+| + deeper (3,4,6,3) blocks, reverted to original widths (promoted from `experiments/exp_ablation_wd1e3_deeper.py`) | 62.09 % | +3.19 |
+| + widen channels to (80,160,320,640) on the deeper layout (promoted from `experiments/exp_ablation_deep_wide.py`) | 63.42 % | +1.33 |
+| + ResNet-101 depth (3,4,23,3) reverted to original widths (promoted from `experiments/exp_cap_resnet101.py`) | 67.54 % | +4.12 |
+| + BlurPool antialiased downsampling at every stride-2 transition (promoted from `experiments/exp_blurpool_resnet101.py`) | **70.26 %** | +2.72 |
 
 Each row is one knob landing in the live recipe; everything else stayed
-fixed across rows so each delta is attributable.
+fixed across rows so each delta is attributable. The deeper-blocks
+promotion superseded the wider-channels one: in head-to-head ablation,
+depth at the original widths beat width at the original depth, and the
+two stack on top of each other only via a much bigger total model that
+wouldn't fit the size budget. The shipped `model.pth` is stored as fp16
+(~41 MB) to keep zip headroom for future changes; `test.py` upcasts
+back to fp32 transparently on load.

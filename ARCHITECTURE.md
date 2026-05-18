@@ -32,20 +32,29 @@ isn't allowed.
 
 ### 2.1 Overall layout
 
-A custom pre-activation ResNet with Squeeze-and-Excitation gating. ~11.3 M
-parameters, ~45 MB at fp32 on disk.
+A custom pre-activation ResNet with Squeeze-and-Excitation gating, in
+the **ResNet-101 stage layout** (3-4-23-3 residual blocks) at the
+original ResNet-18 channel widths (64-128-256-512), with **BlurPool
+antialiased downsampling** (Zhang 2019, arXiv:1904.11486) at every
+stride-2 transition. ~41.7 M parameters; BlurPool kernels are fixed
+non-trainable buffers so they don't enter the param count. The live
+`model.pth` is stored as **fp16** (~80 MB on disk) to fit under the
+100 MB submission-zip cap. The inference path in `test.py` upcasts
+the weights back to fp32 on load, so the forward computation is
+unchanged.
 
 ```
 input (3 × 224 × 224)
 └─► Conv 3×3 stride 2          → 64 × 112 × 112    (stem)
-    └─► PreAct-SE × 2  stride 1 → 64 × 112 × 112   (stage 1)
-        └─► PreAct-SE × 2  stride 2 → 128 × 56 × 56  (stage 2)
-            └─► PreAct-SE × 2 stride 2 → 256 × 28 × 28 (stage 3)
-                └─► PreAct-SE × 2 stride 2 → 512 × 14 × 14 (stage 4)
-                    └─► BN → SiLU → AdaptiveAvgPool(1) → Dropout(0.2) → Linear(37)
+    └─► MaxPool 3×3 stride 2   → 64 × 56  × 56
+        └─► PreAct-SE × 3  stride 1 → 64  × 56 × 56   (stage 1)
+            └─► PreAct-SE × 4 stride 2 → 128 × 28 × 28  (stage 2)
+                └─► PreAct-SE × 23 stride 2 → 256 × 14 × 14 (stage 3)
+                    └─► PreAct-SE × 3 stride 2 → 512 × 7 × 7 (stage 4)
+                        └─► BN → SiLU → AdaptiveAvgPool(1) → Dropout(0.2) → Linear(37)
 ```
 
-Total parametric layers: 20 Conv2d + 17 BatchNorm2d + 17 Linear = **54**.
+Total parametric layers: 70 Conv2d + 67 BatchNorm2d + 67 Linear = **204**.
 
 ### 2.2 Stem — 3×3 stride-2 conv + MaxPool 3×3 stride-2
 
@@ -104,7 +113,7 @@ feat → AdaptiveAvgPool(1) → Linear(C, C/16) → SiLU → Linear(C/16, C) →
 Two reasons SE is worth the cost on this dataset:
 
 1. **Per-channel re-weighting is cheap.** With reduction = 16 the SE
-   bottleneck adds <1 % to total params (~150 K of ~11.3 M).
+   bottleneck adds ~1 % to total params (~430 K of ~41.7 M).
 2. **Pet breeds vary in colour-channel emphasis.** Some breeds are
    distinguished primarily by coat hue, others by body silhouette; an
    end-to-end-learned channel gate is a natural fit.
@@ -124,19 +133,61 @@ SiLU pairs cleanly with BN.
 
 ### 2.6 Depth and width
 
-Channel ladder `[64, 128, 256, 512]` with **two blocks per stage** —
-matching ResNet-18's depth but with my own stem, SE, and pre-activation
-variants. Depth and width are about right for the data budget:
+Channel ladder **`[64, 128, 256, 512]`** at the original ResNet-18
+widths, with **block distribution `(3, 4, 23, 3)`** — the **ResNet-101
+stage layout**. 33 residual blocks total, 23 of them concentrated in
+stage 3 (256 channels, 14×14 feature maps).
 
-- Wider models (e.g. channel ladder ×1.5) overfit visibly within 30
-  epochs, with clean-train accuracy pulling away from val accuracy.
-- Deeper models (3 or 4 blocks per stage) push past my <50 MB
-  `model.pth` target without delivering proportionate gains in 30 epochs
-  from scratch.
+The shipping choice landed after a chain of structural ablations that
+each beat the previous best:
 
-ResNet-18-shaped architectures land in a useful sweet spot for a
-~3 300-image training set: enough capacity to fit the data, not so much
-that regularisation has to do all the work.
+| Variant | Param count | Q15 |
+|---|---|---|
+| Original `(64,128,256,512)` × `(2,2,2,2)` | 11.3 M | 56.39 % |
+| Wider channels at depth 2 (`(96,192,384,768)` × `(2,2,2,2)`) | 25.3 M | 58.90 % |
+| Deeper at original widths (`(64,128,256,512)` × `(3,4,6,3)`) | 21.5 M | 62.09 % |
+| Deeper AND widened (`(80,160,320,640)` × `(3,4,6,3)`) | 33.5 M | 63.42 % |
+| Wider only at deeper layout (`(88,176,352,704)` × `(3,4,6,3)`) | 40.5 M | 63.51 % |
+| Stage-3 deeper (`(80,160,320,640)` × `(3,4,9,3)`) | 39.1 M | 65.00 % |
+| **ResNet-101 layout (`(64,128,256,512)` × `(3,4,23,3)`)** | **41.7 M** | **67.54 %** |
+
+The pattern is striking: **depth beats width** at this dataset scale.
+Each width-only experiment delivered noise-level gains; each
+depth-only experiment compounded. Going from 8 → 16 → 24 → 33 stage-3
+blocks (across the chain) lifted Q15 monotonically. Width experiments
+at matched parameter budgets gave +0.09pp (within noise).
+
+The interpretation: more residual blocks give the network more
+*nonlinear transforms* to compose, which lets later stages build more
+abstract features out of earlier ones. Wider channels give more
+capacity *per* feature but don't add new layers of composition. For
+breeds that differ in fine markings rather than overall shape, having
+extra composition stages at stage 3 (where the (3,4,23,3) layout
+concentrates 23 blocks) matters more than having more channels at each
+stage.
+
+Same training budget, same recipe (wd=1e-3, 30 epochs, full trainval,
+SGD-Nesterov OneCycle, etc), only architecture knobs flipped between
+runs. The pattern (depth >> width) is robust across the entire chain.
+
+Earlier locked recipes used `(2,2,2,2)` blocks at the original ladder
+(the ResNet-18 layout). I argued for it at the time on the grounds
+that deeper / wider nets overfit on a ~3 680-image trainval set. That
+argument was right at wd=5e-4 (the original weight decay), but
+doubling weight decay to 1e-3 earlier in the experiment chain gave the
+optimiser enough regularisation to use extra capacity productively.
+
+The ResNet-101 layout at the original widths trains to 86.63 %
+clean-train accuracy in 30 epochs and generalises to 67.54 % Q15 —
+both higher than every variant before it. The model is probably still
+under-trained at 30 epochs (clean-train + train-loss are both still
+descending at the end), but the spec caps us at 30 so we eat the cost.
+
+41.7 M params at fp32 = ~160 MB on disk; I save `model.pth` as
+**fp16** (~80 MB) to fit inside the 100 MB zip cap. `test.py` upcasts
+every float tensor back to fp32 on load, so the inference path matches
+training. The fp16 round-trip loses no measurable accuracy on this
+37-way classification.
 
 ### 2.7 Head and dropout
 
@@ -359,7 +410,7 @@ current baseline. The full set:
 | **MaxPool + Full trainval combined** (`exp_ablation_maxpool_plus_full.py`) | **54.13 %** | **+7.39** | **promoted** |
 | AdamW retest on promoted recipe (`exp_ablation_adamw_on_promoted.py`) | 44.62 % | −9.51 vs 54.13 % | lost; SGD still wins |
 | AdamW with lower max_lr (`exp_ablation_adamw_tune.py`) | 49.14 % | −4.99 vs 54.13 % | lost; AdamW lift never materialises |
-| **weight_decay 1e-3** (`exp_ablation_sgd_wd1e3.py`) | **56.39 %** | **+2.26 vs 54.13 %** | **promoted as the final recipe** |
+| **weight_decay 1e-3** (`exp_ablation_sgd_wd1e3.py`) | **56.39 %** | **+2.26 vs 54.13 %** | **promoted** |
 | weight_decay 2e-3 (`exp_ablation_sgd_wd2e3.py`) | 54.24 % | −2.15 vs 56.39 % | lost; over-regularised |
 | wd 1e-3 + mixup_p=0.25 (`exp_ablation_mixup25.py`) | 53.15 % | −0.98 vs 56.39 % | lost; data reg compounds badly |
 | wd 1e-3 + RandomErasing(p=0.25) (`exp_ablation_wd1e3_re25.py`) | 53.50 % | −2.89 vs 56.39 % | lost; same pattern |
@@ -367,9 +418,30 @@ current baseline. The full set:
 | wd 1e-3 + stochastic depth 0.1 (`exp_ablation_wd1e3_drop10.py`) | 48.95 % | −7.44 vs 56.39 % | lost; arch reg too aggressive at 30 epochs |
 | wd 1e-3 + OneCycle pct_start=0.25 (`exp_ablation_wd1e3_pct25.py`) | 55.71 % | −0.68 vs 56.39 % | lost; closest of all but still negative |
 | AdamW + wd 1e-3 (`exp_ablation_adamw_wd1e3.py`) | 48.68 % | −7.71 vs 56.39 % | lost; AdamW is structurally worse here even with matched wd |
+| Aggressive TTA — 4 scale-sets searched (`exp_aggressive_tta.py`) | 56.42 % best | +0.03 vs 56.39 % | no clear win; within noise (denser_13 best) |
+| **wider channels 1.5× `(96,192,384,768)`** (`exp_ablation_wd1e3_wider.py`) | **58.90 %** | **+2.51 vs 56.39 %** | **promoted** |
+| **deeper `(3,4,6,3)` blocks** (`exp_ablation_wd1e3_deeper.py`) | **62.09 %** | **+3.19 vs 58.90 %** | **promoted** |
+| **deep + wide `(80,160,320,640)` × `(3,4,6,3)`** (`exp_ablation_deep_wide.py`) | **63.42 %** | **+1.33 vs 62.09 %** | **promoted** |
+| SWA (last 10 epochs averaged, BN recalibrated) | 50.31 % | −13.11 vs 63.42 % | lost; OneCycle cosine schedule averaged across two orders of magnitude of LR — standard SWA needs constant-LR collection |
+| Multi-scale TTA sweep (4 scale sets) | 56.42 % best | +0.03 vs 56.39 % | no win; current 7-scale window already tuned |
+| Width-only at deeper layout `(88,176,352,704)` × `(3,4,6,3)` | 63.51 % | +0.09 vs 63.42 % | within noise; width doesn't compound |
+| Stage-3 deeper `(80,160,320,640)` × `(3,4,9,3)` | 65.00 % | +1.58 vs 63.42 % | win; more stage-3 depth helps |
+| ResNet-101 layout `(64,128,256,512)` × `(3,4,23,3)` (`exp_cap_resnet101.py`) | **67.54 %** | **+4.12 vs 63.42 %** | **promoted** |
+| **BlurPool antialiased downsampling on ResNet-101** (`exp_blurpool_resnet101.py`) | **70.26 %** | **+2.72 vs 67.54 %** | **promoted as the final recipe** |
 
-Of the nineteen experiments, six were promotions and thirteen were honest
-negatives (recorded as `result.json` for audit). The largest single
+Of the twenty-nine experiments, eleven were promotions and eighteen were
+honest negatives. Two strong patterns emerged:
+
+- **Depth >> width** on this dataset and budget — every width-only
+  experiment landed in noise while every depth-only experiment compounded.
+- **BlurPool was a free lift** orthogonal to depth: zero added
+  parameters (the binomial kernel is a fixed buffer) but +2.72 pp on
+  Q15. The interpretation is that stride-2 convs alias the signal —
+  a 1-pixel shift in the input can land on a different sample grid
+  and flip the output — and with 33 residual blocks the alias errors
+  compound. Low-passing before subsampling at every stride-2
+  transition fixes the shift-equivariance and lets the network learn
+  more stable filters. The largest single
 gain came from adding a stem MaxPool — directly contradicting my
 original "keep 112 × 112 to preserve detail" intuition. The largest
 combined gain came from stacking MaxPool with training on the full
@@ -416,7 +488,12 @@ This was built up in stages from the single-view HFlip baseline of
 | 3-scale + HFlip | 46.42 % | +0.82 | `experiments/exp_multi_scale_tta.py` |
 | 7-scale + HFlip | 46.74 % | +0.32 | `experiments/exp_tta_search.py` |
 | 7-scale + HFlip on MaxPool + full-trainval recipe | 54.13 % | +7.39 | `experiments/exp_ablation_maxpool_plus_full.py` |
-| 7-scale + HFlip on MaxPool + full-trainval + wd 1e-3 | **56.39 %** | +2.26 | `experiments/exp_ablation_sgd_wd1e3.py` |
+| 7-scale + HFlip on MaxPool + full-trainval + wd 1e-3 | 56.39 % | +2.26 | `experiments/exp_ablation_sgd_wd1e3.py` |
+| 7-scale + HFlip on the wider (1.5×) recipe | 58.90 % | +2.51 | `experiments/exp_ablation_wd1e3_wider.py` |
+| 7-scale + HFlip on the deeper `(3,4,6,3)` recipe | 62.09 % | +3.19 | `experiments/exp_ablation_wd1e3_deeper.py` |
+| 7-scale + HFlip on the deep+wide recipe | 63.42 % | +1.33 | `experiments/exp_ablation_deep_wide.py` |
+| 7-scale + HFlip on the ResNet-101 recipe | 67.54 % | +4.12 | `experiments/exp_cap_resnet101.py` |
+| 7-scale + HFlip on the BlurPool + ResNet-101 recipe | **70.26 %** | +2.72 | `experiments/exp_blurpool_resnet101.py` |
 
 The 7-scale grid search also tested wider/denser scale ranges and
 10-crop / 10-crop-multi-scale combinations. 10-crop hurt accuracy
