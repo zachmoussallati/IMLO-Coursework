@@ -1,0 +1,17 @@
+{
+  "experiment": "ablation_deep_wide",
+  "knob_overrides": {
+    "use_maxpool": true,
+    "optimizer_kind": "sgd",
+    "use_full_trainval": true
+  },
+  "param_count": 33512981,
+  "n_train": 3680,
+  "n_val": 0,
+  "q14_trainval_acc_pct": 83.45,
+  "q15_test_acc_pct_7scale_tta": 63.42,
+  "baseline_test_acc_pct": 62.09,
+  "delta_pp": 1.33,
+  "verdict": "BEATS BASELINE",
+  "notes": "(80,160,320,640) widths x (3,4,6,3) depth, ~33.5M params, ~64MB fp16."
+}

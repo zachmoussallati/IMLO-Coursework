@@ -1,0 +1,17 @@
+{
+  "experiment": "ablation_wd1e3_wider",
+  "knob_overrides": {
+    "use_maxpool": true,
+    "optimizer_kind": "sgd",
+    "use_full_trainval": true
+  },
+  "param_count": 25346813,
+  "n_train": 3680,
+  "n_val": 0,
+  "q14_trainval_acc_pct": 80.05,
+  "q15_test_acc_pct_7scale_tta": 58.9,
+  "baseline_test_acc_pct": 56.39,
+  "delta_pp": 2.51,
+  "verdict": "BEATS BASELINE",
+  "notes": "wd=1e-3 + wider channels (96,192,384,768), ~25.3M params, ~97MB model.pth."
+}

@@ -1,0 +1,17 @@
+{
+  "experiment": "cap_80_349",
+  "knob_overrides": {
+    "use_maxpool": true,
+    "optimizer_kind": "sgd",
+    "use_full_trainval": true
+  },
+  "param_count": 39085841,
+  "n_train": 3680,
+  "n_val": 0,
+  "q14_trainval_acc_pct": 85.38,
+  "q15_test_acc_pct_7scale_tta": 65.0,
+  "baseline_test_acc_pct": 63.42,
+  "delta_pp": 1.58,
+  "verdict": "BEATS BASELINE",
+  "notes": "Capacity sweep: (80,160,320,640)x(3,4,9,3) depth-only, ~39.1M params."
+}

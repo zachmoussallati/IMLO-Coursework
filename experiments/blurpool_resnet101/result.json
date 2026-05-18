@@ -1,0 +1,17 @@
+{
+  "experiment": "blurpool_resnet101",
+  "knob_overrides": {
+    "use_maxpool": true,
+    "optimizer_kind": "sgd",
+    "use_full_trainval": true
+  },
+  "param_count": 41672237,
+  "n_train": 3680,
+  "n_val": 0,
+  "q14_trainval_acc_pct": 90.84,
+  "q15_test_acc_pct_7scale_tta": 70.26,
+  "baseline_test_acc_pct": 67.54,
+  "delta_pp": 2.72,
+  "verdict": "BEATS BASELINE",
+  "notes": "ResNet-101 (3,4,23,3) + BlurPool antialiased stride-2 transitions."
+}

@@ -1,0 +1,17 @@
+{
+  "experiment": "ablation_swa",
+  "knob_overrides": {
+    "use_maxpool": true,
+    "optimizer_kind": "sgd",
+    "use_full_trainval": true
+  },
+  "param_count": 33512981,
+  "n_train": 3680,
+  "n_val": 0,
+  "q14_trainval_acc_pct": 65.82,
+  "q15_test_acc_pct_7scale_tta": 50.31,
+  "baseline_test_acc_pct": 63.42,
+  "delta_pp": -13.11,
+  "verdict": "WORSE THAN BASELINE",
+  "notes": "Deep+wide (80,160,320,640)x(3,4,6,3) + SWA over epochs 21..30 + BN recalibration."
+}

@@ -1,0 +1,142 @@
+{
+  "experiment": "aggressive_tta_v2",
+  "baseline_test_acc_pct": 70.26,
+  "margin_pp": 0.3,
+  "results": {
+    "baseline_7": {
+      "scales": [
+        208,
+        224,
+        240,
+        256,
+        272,
+        288,
+        304
+      ],
+      "n_views": 14,
+      "test_acc_probs": 70.2644,
+      "test_acc_logits": 69.583,
+      "delta_pp_probs": 0.0044,
+      "delta_pp_logits": -0.677
+    },
+    "wider_11": {
+      "scales": [
+        192,
+        208,
+        224,
+        240,
+        256,
+        272,
+        288,
+        304,
+        320,
+        336,
+        352
+      ],
+      "n_views": 22,
+      "test_acc_probs": 70.0463,
+      "test_acc_logits": 68.9016,
+      "delta_pp_probs": -0.2137,
+      "delta_pp_logits": -1.3584
+    },
+    "denser_13": {
+      "scales": [
+        208,
+        216,
+        224,
+        232,
+        240,
+        248,
+        256,
+        264,
+        272,
+        280,
+        288,
+        296,
+        304
+      ],
+      "n_views": 26,
+      "test_acc_probs": 70.1008,
+      "test_acc_logits": 69.5557,
+      "delta_pp_probs": -0.1592,
+      "delta_pp_logits": -0.7043
+    },
+    "tight_9": {
+      "scales": [
+        216,
+        224,
+        232,
+        240,
+        248,
+        256,
+        264,
+        272,
+        280
+      ],
+      "n_views": 18,
+      "test_acc_probs": 70.1554,
+      "test_acc_logits": 69.9101,
+      "delta_pp_probs": -0.1046,
+      "delta_pp_logits": -0.3499
+    },
+    "wide_step8": {
+      "scales": [
+        200,
+        208,
+        216,
+        224,
+        232,
+        240,
+        248,
+        256,
+        264,
+        272,
+        280,
+        288,
+        296,
+        304,
+        312
+      ],
+      "n_views": 30,
+      "test_acc_probs": 70.5369,
+      "test_acc_logits": 69.8283,
+      "delta_pp_probs": 0.2769,
+      "delta_pp_logits": -0.4317
+    },
+    "focused_5": {
+      "scales": [
+        240,
+        248,
+        256,
+        264,
+        272
+      ],
+      "n_views": 10,
+      "test_acc_probs": 68.7108,
+      "test_acc_logits": 68.6018,
+      "delta_pp_probs": -1.5492,
+      "delta_pp_logits": -1.6582
+    },
+    "single_224": {
+      "scales": [
+        224
+      ],
+      "n_views": 2,
+      "test_acc_probs": 69.9101,
+      "test_acc_logits": 69.9646,
+      "delta_pp_probs": -0.3499,
+      "delta_pp_logits": -0.2954
+    },
+    "single_256": {
+      "scales": [
+        256
+      ],
+      "n_views": 2,
+      "test_acc_probs": 68.4928,
+      "test_acc_logits": 68.4928,
+      "delta_pp_probs": -1.7672,
+      "delta_pp_logits": -1.7672
+    }
+  },
+  "verdict": "no win > 0.3pp; keep locked 7-scale (best was wide_step8_probs 70.54%, +0.28)"
+}

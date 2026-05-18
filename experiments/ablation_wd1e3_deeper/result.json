@@ -1,0 +1,17 @@
+{
+  "experiment": "ablation_wd1e3_deeper",
+  "knob_overrides": {
+    "use_maxpool": true,
+    "optimizer_kind": "sgd",
+    "use_full_trainval": true
+  },
+  "param_count": 21456925,
+  "n_train": 3680,
+  "n_val": 0,
+  "q14_trainval_acc_pct": 80.68,
+  "q15_test_acc_pct_7scale_tta": 62.09,
+  "baseline_test_acc_pct": 56.39,
+  "delta_pp": 5.7,
+  "verdict": "BEATS BASELINE",
+  "notes": "wd=1e-3 + deeper (3,4,6,3) ResNet-50 stage layout, ~21.5M params, ~82MB model.pth."
+}

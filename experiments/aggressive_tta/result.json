@@ -1,0 +1,74 @@
+{
+  "experiment": "aggressive_tta",
+  "baseline_test_acc_pct": 56.39,
+  "margin_pp": 0.3,
+  "results": {
+    "wider_11": {
+      "scales": [
+        192,
+        208,
+        224,
+        240,
+        256,
+        272,
+        288,
+        304,
+        320,
+        336,
+        352
+      ],
+      "n_views": 22,
+      "test_acc_pct": 55.6555,
+      "delta_pp": -0.7345
+    },
+    "denser_13": {
+      "scales": [
+        208,
+        216,
+        224,
+        232,
+        240,
+        248,
+        256,
+        264,
+        272,
+        280,
+        288,
+        296,
+        304
+      ],
+      "n_views": 26,
+      "test_acc_pct": 56.4186,
+      "delta_pp": 0.0286
+    },
+    "focused_7": {
+      "scales": [
+        216,
+        232,
+        248,
+        256,
+        264,
+        280,
+        296
+      ],
+      "n_views": 14,
+      "test_acc_pct": 56.0098,
+      "delta_pp": -0.3802
+    },
+    "baseline_7": {
+      "scales": [
+        208,
+        224,
+        240,
+        256,
+        272,
+        288,
+        304
+      ],
+      "n_views": 14,
+      "test_acc_pct": 56.3914,
+      "delta_pp": 0.0014
+    }
+  },
+  "verdict": "no winner > 0.30pp margin; keep locked 7-scale TTA"
+}
