@@ -427,10 +427,15 @@ current baseline. The full set:
 | Width-only at deeper layout `(88,176,352,704)` × `(3,4,6,3)` | 63.51 % | +0.09 vs 63.42 % | within noise; width doesn't compound |
 | Stage-3 deeper `(80,160,320,640)` × `(3,4,9,3)` | 65.00 % | +1.58 vs 63.42 % | win; more stage-3 depth helps |
 | ResNet-101 layout `(64,128,256,512)` × `(3,4,23,3)` (`exp_cap_resnet101.py`) | **67.54 %** | **+4.12 vs 63.42 %** | **promoted** |
-| **BlurPool antialiased downsampling on ResNet-101** (`exp_blurpool_resnet101.py`) | **70.26 %** | **+2.72 vs 67.54 %** | **promoted as the final recipe** |
+| BlurPool antialiased downsampling on ResNet-101 (`exp_blurpool_resnet101.py`) | **70.26 %** | **+2.72 vs 67.54 %** | **promoted** |
+| **5-crop TTA on the BlurPool + ResNet-101 model** (`exp_4crop_tta.py`) | **71.25 %** | **+0.99 vs 70.26 %** | **promoted as the final recipe** |
 
-Of the twenty-nine experiments, eleven were promotions and eighteen were
-honest negatives. Two strong patterns emerged:
+Of the thirty experiments, twelve were promotions and eighteen were
+honest negatives. Plus four additional inference-only / regularisation
+tests after BlurPool landed — all negative (MixUp p=0.10 −2.45 pp,
+stage-4 wider 640 −1.77 pp, 2-layer MLP head −3.35 pp,
+BlurPool + (3,4,30,3) deeper −1.17 pp) — except the 5-crop TTA win.
+The patterns:
 
 - **Depth >> width** on this dataset and budget — every width-only
   experiment landed in noise while every depth-only experiment compounded.
@@ -441,7 +446,14 @@ honest negatives. Two strong patterns emerged:
   and flip the output — and with 33 residual blocks the alias errors
   compound. Low-passing before subsampling at every stride-2
   transition fixes the shift-equivariance and lets the network learn
-  more stable filters. The largest single
+  more stable filters.
+- **5-crop TTA at every scale** added +0.99 pp at zero retraining
+  cost. The corner crops add weak-but-meaningfully-different votes
+  per scale; at 7 scales × 5 crops × 2 flips = 70 forward passes per
+  test image, the ensemble averages out a measurable amount of
+  centre-bias the single-crop pipeline carried.
+
+The largest single
 gain came from adding a stem MaxPool — directly contradicting my
 original "keep 112 × 112 to preserve detail" intuition. The largest
 combined gain came from stacking MaxPool with training on the full
@@ -493,7 +505,8 @@ This was built up in stages from the single-view HFlip baseline of
 | 7-scale + HFlip on the deeper `(3,4,6,3)` recipe | 62.09 % | +3.19 | `experiments/exp_ablation_wd1e3_deeper.py` |
 | 7-scale + HFlip on the deep+wide recipe | 63.42 % | +1.33 | `experiments/exp_ablation_deep_wide.py` |
 | 7-scale + HFlip on the ResNet-101 recipe | 67.54 % | +4.12 | `experiments/exp_cap_resnet101.py` |
-| 7-scale + HFlip on the BlurPool + ResNet-101 recipe | **70.26 %** | +2.72 | `experiments/exp_blurpool_resnet101.py` |
+| 7-scale + HFlip on the BlurPool + ResNet-101 recipe | 70.26 % | +2.72 | `experiments/exp_blurpool_resnet101.py` |
+| 7-scale + 5-crop + HFlip on the BlurPool + ResNet-101 recipe | **71.25 %** | +0.99 | `experiments/exp_4crop_tta.py` |
 
 The 7-scale grid search also tested wider/denser scale ranges and
 10-crop / 10-crop-multi-scale combinations. 10-crop hurt accuracy

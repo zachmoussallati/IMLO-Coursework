@@ -24,11 +24,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from src.data import DATA_ROOT, STATS_PATH
 from src.model import build_model
-from src.train_loop import evaluate_test_with_multiscale_tta
+from src.train_loop import evaluate_test_with_5crop_multiscale_tta
 
 
-BATCH_SIZE = 128
-NUM_WORKERS = 2
+BATCH_SIZE = 32   # 32 base images x 5 crops = effective 160 forward-pass batch
+NUM_WORKERS = 0   # single-process for the 5-crop transform on Windows
 MODEL_PATH = "model.pth"
 # why: live architecture knobs. Must match what train.py built so the
 # saved state dict shape matches at load.
@@ -45,13 +45,12 @@ BLOCKS_PER_STAGE = (3, 4, 23, 3)
 # top of ResNet-101 layout - lifted Q15 +2.72pp (67.54 -> 70.26) at
 # zero added params.
 USE_BLURPOOL = True
-# why: 7-scale TTA. Promoted from experiments/exp_tta_search.py after it
-# beat the 3-scale baseline by +0.32pp (46.42% -> 46.74%). The two TTA
-# promotions stacked are +1.14pp over the single-view 45.60% HFlip-only
-# baseline. Scales centred on the 256 train-time eval, with steps of 16
-# either side. 10-crop variants were worse at this dataset because pets
-# are typically centred and corner crops cut the subject. Each scale runs
-# with its HFlip; softmax probs are summed across all 14 views.
+# why: 7-scale TTA. Each scale is resized to the shorter side, then
+# 5 crops (centre + 4 corners) of 224x224 are taken from the (often
+# rectangular) resized image, and each crop runs with its HFlip.
+# Total views per test image = 7 scales x 5 crops x 2 flips = 70.
+# The 5-crop step was promoted after the 4-crop ablation showed
+# +0.99 pp on Q15 (70.26 -> 71.25) at the BlurPool+ResNet-101 recipe.
 TTA_SCALES = (208, 224, 240, 256, 272, 288, 304)
 
 
@@ -93,7 +92,7 @@ def main() -> None:
     model.load_state_dict(state)
     model.eval()
 
-    accuracy = evaluate_test_with_multiscale_tta(
+    accuracy = evaluate_test_with_5crop_multiscale_tta(
         model,
         data_root=DATA_ROOT,
         stats=stats,

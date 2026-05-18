@@ -148,16 +148,17 @@ final block of `train.py`.
 
 ## Q15 — Accuracy on the official test set
 
-**Answer:** `70.26 %`
+**Answer:** `71.25 %`
 
-Evaluated on all 3 669 test images with **7-scale + horizontal-flip TTA**.
-For each test image I build seven eval transforms — `Resize(s)` for
-`s ∈ {208, 224, 240, 256, 272, 288, 304}`, each followed by
-`CenterCrop(224)` and the trainval-derived `Normalize` — run the model
-and its horizontal flip through each, and sum the softmax probabilities
-across all fourteen views. Argmax over the accumulated total is the
-prediction. This is the same function `test.py` calls, so `train.py`'s
-reported number matches what the markers see when they run
+Evaluated on all 3 669 test images with **7-scale + 5-crop + horizontal-flip TTA**.
+For each test image I build seven `Resize(s)` transforms for
+`s ∈ {208, 224, 240, 256, 272, 288, 304}`, normalise with the trainval
+mean/std, then take **5 crops** (centre + four corners) of 224×224
+from each resized image, and forward each crop together with its
+horizontal flip. Softmax probabilities are summed across all
+`7 × 5 × 2 = 70` views per image, and the argmax of the accumulated
+distribution is the prediction. `test.py` calls the same function so
+`train.py`'s reported Q15 matches what markers see when they run
 `python test.py`.
 
 Promotion history:
@@ -174,7 +175,8 @@ Promotion history:
 | + deeper (3,4,6,3) blocks, reverted to original widths (promoted from `experiments/exp_ablation_wd1e3_deeper.py`) | 62.09 % | +3.19 |
 | + widen channels to (80,160,320,640) on the deeper layout (promoted from `experiments/exp_ablation_deep_wide.py`) | 63.42 % | +1.33 |
 | + ResNet-101 depth (3,4,23,3) reverted to original widths (promoted from `experiments/exp_cap_resnet101.py`) | 67.54 % | +4.12 |
-| + BlurPool antialiased downsampling at every stride-2 transition (promoted from `experiments/exp_blurpool_resnet101.py`) | **70.26 %** | +2.72 |
+| + BlurPool antialiased downsampling at every stride-2 transition (promoted from `experiments/exp_blurpool_resnet101.py`) | 70.26 % | +2.72 |
+| + 5-crop test-time augmentation at every scale (promoted from `experiments/exp_4crop_tta.py`) | **71.25 %** | +0.99 |
 
 Each row is one knob landing in the live recipe; everything else stayed
 fixed across rows so each delta is attributable. The deeper-blocks

@@ -30,7 +30,7 @@ from src.model import build_model
 from src.mixup import soft_target_cross_entropy
 from src.train_loop import (
     evaluate,
-    evaluate_test_with_multiscale_tta,
+    evaluate_test_with_5crop_multiscale_tta,
     train_one_epoch,
 )
 from src.utils import make_worker_init, seed_all, write_model_summary
@@ -251,14 +251,14 @@ def main() -> None:
     # why: same multi-scale + HFlip TTA path that test.py uses, so the
     # number I print here matches what the markers see when they run
     # python test.py.
-    test_acc = evaluate_test_with_multiscale_tta(
+    test_acc = evaluate_test_with_5crop_multiscale_tta(
         model,
         data_root=DATA_ROOT,
         stats=loaders["stats"],
         device=device,
         scales=(208, 224, 240, 256, 272, 288, 304),
-        batch_size=batch_size,
-        num_workers=2,
+        batch_size=32,
+        num_workers=0,
     )
     q14 = full_trainval["acc"] * 100
     q15 = test_acc * 100

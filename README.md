@@ -7,8 +7,8 @@ ResNet with Squeeze-and-Excitation, a MaxPool stem, a
 channel widths `(64,128,256,512)`, and **BlurPool antialiased
 downsampling** at every stride-2 transition. ~41.7 M parameters,
 trained from scratch in 30 epochs on the official 3 680-image
-`trainval` split. Evaluation uses 7-scale + horizontal-flip
-test-time augmentation.
+`trainval` split. Evaluation uses **7-scale + 5-crop + horizontal-flip**
+test-time augmentation (70 forward passes per test image).
 
 See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the design write-up and
 [`submission_answers.md`](submission_answers.md) for the Q1–Q15 form
@@ -57,14 +57,15 @@ Both scripts require CUDA. They will raise immediately if
   batch is unchanged.
 - **Test**: ~2 minutes for a 7-scale + HFlip TTA pass over the 3 669-image
   test split (14 forward passes per image).
-- **Accuracy**: ~70 % on the official test split, ~91 % on the 3 680-image
+- **Accuracy**: ~71 % on the official test split, ~91 % on the 3 680-image
   trainval (which is the full training pool — no held-out val). From-
   scratch / 30-epoch / no-pretraining is the binding constraint; the
   cumulative promotions over the original 45.60 % recipe came from TTA
   (+1.14 pp), a stem MaxPool (+5.13 pp), training on the full trainval
   (+2.26 pp), weight-decay 1e-3 (+2.26 pp), the structural chain
-  (deeper → deep+wide → ResNet-101 layout, +11.15 pp net), and finally
-  BlurPool antialiased downsampling on top of ResNet-101 (+2.72 pp).
+  (deeper → deep+wide → ResNet-101 layout, +11.15 pp net), BlurPool
+  antialiased downsampling on top of ResNet-101 (+2.72 pp), and the
+  final 5-crop TTA promotion (+0.99 pp). **Final Q15 = 71.25 %.**
 
 ## Reproducibility
 
