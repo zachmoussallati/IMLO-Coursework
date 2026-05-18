@@ -340,3 +340,138 @@ def evaluate_test_with_multiscale_tta(
     assert ensembled_probs is not None and reference_labels is not None
     correct = (ensembled_probs.argmax(dim=1) == reference_labels).sum().item()
     return correct / reference_labels.numel()
+
+
+def _five_crop(t: torch.Tensor, crop_h: int, crop_w: int) -> torch.Tensor:
+    """Return [5, C, crop_h, crop_w]: centre + four corners of t [C, H, W].
+
+    Pure tensor slicing - no autograd, no copy beyond the implicit one
+    that torch.stack performs.
+    """
+    _, h, w = t.shape
+    tl = t[:, :crop_h, :crop_w]
+    tr = t[:, :crop_h, w - crop_w:]
+    bl = t[:, h - crop_h:, :crop_w]
+    br = t[:, h - crop_h:, w - crop_w:]
+    cy = (h - crop_h) // 2
+    cx = (w - crop_w) // 2
+    ct = t[:, cy:cy + crop_h, cx:cx + crop_w]
+    return torch.stack([ct, tl, tr, bl, br], dim=0)
+
+
+@torch.no_grad()
+def evaluate_test_with_5crop_multiscale_tta(
+    model: nn.Module,
+    data_root: str,
+    stats: dict,
+    device: torch.device,
+    scales: tuple[int, ...] = (208, 224, 240, 256, 272, 288, 304),
+    batch_size: int = 32,
+    num_workers: int = 0,
+    use_amp: bool = True,
+) -> float:
+    """Multi-scale + 5-crop + HFlip TTA on the official test split.
+
+    Extends evaluate_test_with_multiscale_tta with two changes:
+      - five-crop instead of centre-crop at each scale (centre + four
+        corners), so 5 views per scale instead of 1
+      - smooth bilinear upscale (instead of zero-padded CenterCrop) when
+        the resized image is smaller than image_size in either dim
+
+    Total: len(scales) * 5 * 2 = 70 forward passes per test image at the
+    default 7-scale setting. Each scale resizes to scale on the shorter
+    side, then 5-crops crop_size x crop_size patches from the (often
+    rectangular) resized image. With HFlip these become 10 views per
+    scale, summed in probability space.
+
+    why num_workers=0 by default: Windows DataLoader worker spawn cost
+    dominates this loop because we recreate a DataLoader per scale and
+    each scale's transform is cheap. Single-process loading is faster
+    here.
+    """
+    from torch.utils.data import DataLoader, Dataset
+    from torchvision import transforms as T
+    from torchvision.datasets import OxfordIIITPet
+
+    crop_size = stats.get("image_size", 224)
+    model.eval()
+
+    class _FiveCropDS(Dataset):
+        """Resize -> normalise -> 5-crop. Returns [5, C, crop, crop] per item."""
+
+        def __init__(self, raw_ds, base_transform, target_crop):
+            self.raw_ds = raw_ds
+            self.base_transform = base_transform
+            self.target_crop = target_crop
+
+        def __len__(self) -> int:
+            return len(self.raw_ds)
+
+        def __getitem__(self, idx):
+            img, lbl = self.raw_ds[idx]
+            t = self.base_transform(img)
+            # why: if Resize(scale) produced an image smaller than crop_size
+            # on either axis, smooth-upscale to crop_size before 5-cropping.
+            # This is friendlier than zero-padding (which the standard
+            # CenterCrop fallback does) when scale < crop_size.
+            if t.shape[-2] < self.target_crop or t.shape[-1] < self.target_crop:
+                t = F.interpolate(
+                    t.unsqueeze(0), size=self.target_crop,
+                    mode="bilinear", align_corners=False,
+                ).squeeze(0)
+            return _five_crop(t, self.target_crop, self.target_crop), lbl
+
+    ensembled_probs: torch.Tensor | None = None
+    reference_labels: torch.Tensor | None = None
+
+    for scale in scales:
+        base_t = T.Compose([
+            T.Resize(scale),
+            T.ToTensor(),
+            T.Normalize(stats["mean"], stats["std"]),
+        ])
+        raw_ds = OxfordIIITPet(
+            root=data_root, split="test", target_types="category",
+            download=True,
+        )
+        wrapped = _FiveCropDS(raw_ds, base_t, crop_size)
+        loader = DataLoader(
+            wrapped, batch_size=batch_size, shuffle=False,
+            num_workers=num_workers, pin_memory=True,
+        )
+
+        scale_probs: list[torch.Tensor] = []
+        scale_labels: list[torch.Tensor] = []
+        for crops, labels in loader:
+            # crops: [B, 5, C, S, S] -> flat [B*5, C, S, S]
+            b, n_crops, c, s, _ = crops.shape
+            flat = crops.view(b * n_crops, c, s, s).to(device, non_blocking=True)
+            flipped = torch.flip(flat, dims=[3])
+            if use_amp:
+                with torch.amp.autocast("cuda"):
+                    logits_a = model(flat)
+                    logits_b = model(flipped)
+            else:
+                logits_a = model(flat)
+                logits_b = model(flipped)
+            probs = F.softmax(logits_a, dim=1) + F.softmax(logits_b, dim=1)
+            # sum the 5 crop probs back to one prediction per original image
+            probs = probs.view(b, n_crops, -1).sum(dim=1)
+            scale_probs.append(probs.cpu())
+            scale_labels.append(labels)
+
+        probs_tensor = torch.cat(scale_probs, dim=0)
+        labels_tensor = torch.cat(scale_labels, dim=0)
+        if ensembled_probs is None:
+            ensembled_probs = probs_tensor.clone()
+            reference_labels = labels_tensor
+        else:
+            assert reference_labels is not None
+            assert torch.equal(
+                labels_tensor, reference_labels
+            ), "label order changed across scales"
+            ensembled_probs += probs_tensor
+
+    assert ensembled_probs is not None and reference_labels is not None
+    correct = (ensembled_probs.argmax(dim=1) == reference_labels).sum().item()
+    return correct / reference_labels.numel()
